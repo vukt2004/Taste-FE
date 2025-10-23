@@ -4,12 +4,13 @@ import L from 'leaflet';
 
 interface MapPageProps {
   onMapLoad?: (map: L.Map) => void;
+  showCenterMarker?: boolean;
 }
 
-const MapPage: React.FC<MapPageProps> = ({ onMapLoad }) => {
+const MapPage: React.FC<MapPageProps> = ({ onMapLoad, showCenterMarker }) => {
   return (
     <div className="h-full w-full">
-      <OpenStreetMap onMapLoad={onMapLoad} />
+      <OpenStreetMap onMapLoad={onMapLoad} showCenterMarker={showCenterMarker} />
     </div>
   );
 };

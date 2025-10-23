@@ -5,7 +5,12 @@ export const API_ENDPOINTS = {
     INIT_SESSION: '/api/Auth/init-session',
     GOOGLE_LOGIN: '/api/Auth/google',
     GOOGLE_CALLBACK: '/api/Auth/google-callback',
-    GOOGLE_WITH_ROLE: '/api/Auth/google-with-role',
+    REGISTER: '/api/Auth/register',
+    LOGIN: '/api/Auth/login',
+  },
+  EMAIL_VERIFICATION: {
+    VERIFY: '/api/EmailVerification/verify',
+    RESEND_OTP: '/api/EmailVerification/resend-otp',
   },
   REVIEWS: {
     UPLOAD_IMAGES: '/api/review/upload-images',
@@ -21,6 +26,10 @@ export const API_ENDPOINTS = {
     CREATE: '/api/dish/contribution',
     LIST: '/api/dish/contribution',
   },
+  RESTAURANT_CONTRIBUTION: {
+    CREATE: '/api/RestaurantContribution',
+    LIST: '/api/RestaurantContribution',
+  },
   DISH_TYPES: {
     LIST: '/api/dishtype',
   },
@@ -29,6 +38,7 @@ export const API_ENDPOINTS = {
     UPDATE: (id: string) => `/api/restaurant/${id}`,
     CLAIM: (id: string) => `/api/restaurant/${id}/claim`,
     TOGGLE_EDIT: '/api/restaurant/toggle-edit',
+    FILTER: '/api/restaurant/filter',
     SEARCH_BY_DISH_IN_BOUNDS: (dishId: string, n: number, s: number, e: number, w: number) =>
       `/api/restaurant/search-by-dish?dishId=${dishId}&north=${n}&south=${s}&east=${e}&west=${w}`,
   },

@@ -10,4 +10,18 @@ export default defineConfig({
       },
     }),
   ],
+  server: {
+    port: 5173,
+    strictPort: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:5268',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+    hmr: {
+      clientPort: 5173,
+    },
+  },
 })

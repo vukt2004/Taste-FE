@@ -41,6 +41,50 @@ export interface Restaurant {
 }
 
 export class UserService {
+  static isTokenExpired(): boolean {
+    const expiresAt = localStorage.getItem('token_expires_at');
+    if (!expiresAt) return true;
+    
+    const expirationTime = new Date(expiresAt).getTime();
+    const currentTime = new Date().getTime();
+    
+    // Kiểm tra nếu token hết hạn trong vòng 5 phút tới
+    return currentTime >= (expirationTime - 5 * 60 * 1000);
+  }
+
+  static async refreshToken(): Promise<boolean> {
+    try {
+      const refreshToken = localStorage.getItem('refresh_token');
+      if (!refreshToken) return false;
+
+      const response = await fetch(`${BACKEND_URL}/api/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ refreshToken }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.isSuccess && data.data) {
+          localStorage.setItem('auth_token', data.data.accessToken);
+          if (data.data.refreshToken) {
+            localStorage.setItem('refresh_token', data.data.refreshToken);
+          }
+          if (data.data.expiresAt) {
+            localStorage.setItem('token_expires_at', data.data.expiresAt);
+          }
+          return true;
+        }
+      }
+      return false;
+    } catch (error) {
+      console.error('Lỗi refresh token:', error);
+      return false;
+    }
+  }
+
   static getAuthHeaders(includeJson: boolean = true): HeadersInit {
     const token = localStorage.getItem('auth_token');
     const headers: Record<string, string> = {};
@@ -85,12 +129,38 @@ export class UserService {
     const userId = localStorage.getItem('user_id');
     if (!userId) return null;
     
+    // Kiểm tra token expiration và refresh nếu cần
+    if (this.isTokenExpired()) {
+      const refreshSuccess = await this.refreshToken();
+      if (!refreshSuccess) {
+        // Nếu không thể refresh, xóa tất cả token
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('user_id');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('token_expires_at');
+        return null;
+      }
+    }
+    
     return this.getUserById(userId);
   }
 
   static async getCurrentUserProfile(): Promise<UserProfile | null> {
     const userId = localStorage.getItem('user_id');
     if (!userId) return null;
+    
+    // Kiểm tra token expiration và refresh nếu cần
+    if (this.isTokenExpired()) {
+      const refreshSuccess = await this.refreshToken();
+      if (!refreshSuccess) {
+        // Nếu không thể refresh, xóa tất cả token
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('user_id');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('token_expires_at');
+        return null;
+      }
+    }
     
     return this.getUserProfile(userId);
   }

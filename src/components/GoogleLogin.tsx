@@ -17,23 +17,71 @@ const GoogleLogin: React.FC<GoogleLoginProps> = ({ onLoginSuccess, onLogout }) =
       const userData = await UserService.getCurrentUser();
       if (userData) {
         setUser(userData);
+        console.log('userData', userData);
         onLoginSuccess?.(userData);
       }
     } catch (err) {
       console.error('Lỗi kiểm tra trạng thái đăng nhập:', err);
+      // Nếu token hết hạn, xóa khỏi localStorage
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user_id');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('token_expires_at');
     }
   }, [onLoginSuccess]);
 
   useEffect(() => {
-    // Kiểm tra xem user đã đăng nhập chưa
     checkAuthStatus();
-  }, [checkAuthStatus]);
+    
+    // Xử lý callback từ Google OAuth
+    const handleAuthCallback = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = urlParams.get('token');
+      const refreshToken = urlParams.get('refreshToken');
+      const expiresAt = urlParams.get('expiresAt');
+      const userData = urlParams.get('user');
+      
+      if (token && userData) {
+        try {
+          // Lưu token và thông tin user
+          localStorage.setItem('auth_token', token);
+          if (refreshToken) localStorage.setItem('refresh_token', refreshToken);
+          if (expiresAt) localStorage.setItem('token_expires_at', expiresAt);
+          
+          const user = JSON.parse(decodeURIComponent(userData));
+          localStorage.setItem('user_id', user.id);
+          
+          setUser(user);
+          onLoginSuccess?.(user);
+          
+          // Xóa các tham số khỏi URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } catch (err) {
+          console.error('Lỗi xử lý callback đăng nhập:', err);
+          setError('Lỗi xử lý đăng nhập');
+        }
+      }
+    };
+    
+    handleAuthCallback();
+  }, [checkAuthStatus, onLoginSuccess]);
 
   const handleGoogleLogin = () => {
     setIsLoading(true);
     setError(null);
-    // Mở trong cùng tab để đơn giản hóa
-    window.location.href = `${BACKEND_URL}${API_ENDPOINTS.AUTH.GOOGLE_LOGIN}`;
+    
+    console.log('[FRONTEND] ==================== BEFORE GOOGLE LOGIN ====================');
+    console.log('[FRONTEND] Backend URL:', BACKEND_URL);
+    console.log('[FRONTEND] Current cookies:', document.cookie);
+    console.log('[FRONTEND] Current URL:', window.location.href);
+    
+    // Redirect directly to Google OAuth
+    // Backend will initialize session automatically
+    const googleLoginUrl = `${BACKEND_URL}${API_ENDPOINTS.AUTH.GOOGLE_LOGIN}`;
+    console.log('[FRONTEND] Redirecting to Google OAuth:', googleLoginUrl);
+    console.log('[FRONTEND] ==================== REDIRECTING NOW ====================');
+    
+    window.location.href = googleLoginUrl;
   };
 
   const handleLogout = async () => {
@@ -46,8 +94,11 @@ const GoogleLogin: React.FC<GoogleLoginProps> = ({ onLoginSuccess, onLogout }) =
     } catch (err) {
       console.error('Lỗi đăng xuất:', err);
     } finally {
+      // Xóa tất cả token và thông tin user
       localStorage.removeItem('auth_token');
       localStorage.removeItem('user_id');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('token_expires_at');
       setUser(null);
       onLogout?.();
     }

@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import React from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -15,35 +15,92 @@ interface OpenStreetMapProps {
   onMapLoad?: (map: L.Map) => void;
   className?: string;
   markers?: { lat: number; lng: number; title?: string; description?: string }[];
+  showCenterMarker?: boolean;
 }
 
-const OpenStreetMap: React.FC<OpenStreetMapProps> = ({ onMapLoad, className = '', markers = [] }) => {
-  const mapRef = useRef<L.Map | null>(null);
+// Component con để lấy map instance và gọi onMapLoad
+const MapInstanceHandler: React.FC<{ onMapLoad?: (map: L.Map) => void; showCenterMarker?: boolean }> = ({ onMapLoad, showCenterMarker }) => {
+  const map = useMap();
 
+  React.useEffect(() => {
+    if (map && onMapLoad) {
+      onMapLoad(map);
+    }
+  }, [map, onMapLoad]);
+
+  // Zoom to nhất và khóa bản đồ khi showCenterMarker = true
+  React.useEffect(() => {
+    if (map && showCenterMarker) {
+      // Zoom to nhất (level 18)
+      map.setZoom(18);
+      
+      // Disable dragging
+      map.dragging.disable();
+      
+      // Disable zoom controls
+      map.touchZoom.disable();
+      map.doubleClickZoom.disable();
+      map.scrollWheelZoom.disable();
+      map.boxZoom.disable();
+      map.keyboard.disable();
+      
+      // Disable zoom buttons
+      if (map.zoomControl) {
+        map.removeControl(map.zoomControl);
+      }
+    } else if (map && !showCenterMarker) {
+      // Enable lại các controls khi không ở chế độ chọn vị trí
+      map.dragging.enable();
+      map.touchZoom.enable();
+      map.doubleClickZoom.enable();
+      map.scrollWheelZoom.enable();
+      map.boxZoom.enable();
+      map.keyboard.enable();
+    }
+  }, [map, showCenterMarker]);
+
+  return null;
+};
+
+// Component để hiển thị marker ở giữa màn hình
+const CenterMarker: React.FC = () => {
+  return (
+    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none">
+      <svg 
+        width="50" 
+        height="50" 
+        viewBox="0 0 24 24" 
+        fill="none" 
+        xmlns="http://www.w3.org/2000/svg"
+        className="drop-shadow-lg"
+      >
+        {/* Location pin - giọt nước ngược */}
+        <path 
+          d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2Z" 
+          fill="#3B82F6" 
+          stroke="white" 
+          strokeWidth="1.5"
+        />
+        {/* Inner circle */}
+        <circle cx="12" cy="9" r="3" fill="white" />
+      </svg>
+    </div>
+  );
+};
+
+const OpenStreetMap: React.FC<OpenStreetMapProps> = ({ onMapLoad, className = '', markers = [], showCenterMarker = false }) => {
   // Tọa độ Hồ Chí Minh
   const center: [number, number] = [10.8231, 106.6297];
   const zoom = 13;
-
-  const handleMapReady = () => {
-    if (mapRef.current) {
-      setTimeout(() => {
-        if (mapRef.current) {
-          mapRef.current.invalidateSize();
-        }
-      }, 0);
-      onMapLoad?.(mapRef.current);
-    }
-  };
 
   return (
     <div className={`w-full h-full ${className}`} style={{ minHeight: '100vh', position: 'relative', zIndex: 1 }}>
       <MapContainer
         center={center}
         zoom={zoom}
-        style={{ height: '100%', width: '100%' }}
-        whenReady={handleMapReady}
-        ref={mapRef}
+        style={{ height: '100vh', width: '100vw' }}
       >
+        <MapInstanceHandler onMapLoad={onMapLoad} showCenterMarker={showCenterMarker} />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -62,6 +119,7 @@ const OpenStreetMap: React.FC<OpenStreetMapProps> = ({ onMapLoad, className = ''
           </Marker>
         ))}
       </MapContainer>
+      {showCenterMarker && <CenterMarker />}
     </div>
   );
 };

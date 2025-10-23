@@ -43,30 +43,12 @@ const AuthCallbackPage: React.FC = () => {
     const url = new URL(window.location.href);
     const token = url.searchParams.get('token');
 
-    const notifyAndClose = (type: 'success' | 'error', data?: { token?: string; user?: unknown; error?: string }) => {
-      try {
-        if (window.opener && !window.opener.closed) {
-          window.opener.postMessage(
-            type === 'success'
-              ? { type: 'GOOGLE_AUTH_SUCCESS', ...data }
-              : { type: 'GOOGLE_AUTH_ERROR', error: data?.error || 'Đăng nhập thất bại' },
-            window.location.origin
-          );
-        }
-      } finally {
-        if (window.opener && !window.opener.closed) {
-          setTimeout(() => window.close(), 100);
-        } else {
-          // Trường hợp cùng tab: điều hướng về trang chủ
-          setTimeout(() => { window.location.replace('/'); }, 100);
-        }
-      }
-    };
-
     (async () => {
       if (!token) {
         setMessage('Thiếu token trong callback.');
-        notifyAndClose('error', { error: 'missing_token' });
+        setTimeout(() => {
+          window.location.replace('/');
+        }, 2000);
         return;
       }
 
@@ -78,20 +60,27 @@ const AuthCallbackPage: React.FC = () => {
 
         if (!userId) {
           setMessage('Không trích xuất được UserId từ token.');
-          notifyAndClose('error', { error: 'invalid_token_payload' });
+          setTimeout(() => {
+            window.location.replace('/');
+          }, 2000);
           return;
         }
 
         localStorage.setItem('user_id', userId);
 
-        const response = await fetch(`${BACKEND_URL}${API_ENDPOINTS.USER.GET_BY_ID}/${userId}`);
-        const user = await response.json();
+        await fetch(`${BACKEND_URL}${API_ENDPOINTS.USER.GET_BY_ID}/${userId}`);
 
-        setMessage('Đăng nhập thành công, đang đóng cửa sổ...');
-        notifyAndClose('success', { token, user });
+        setMessage('Đăng nhập thành công, chuyển hướng...');
+        
+        // Redirect về trang chủ sau 1 giây
+        setTimeout(() => {
+          window.location.replace('/');
+        }, 1000);
       } catch {
         setMessage('Có lỗi xảy ra khi xử lý callback.');
-        notifyAndClose('error', { error: 'callback_processing_error' });
+        setTimeout(() => {
+          window.location.replace('/');
+        }, 2000);
       }
     })();
   }, []);

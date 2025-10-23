@@ -18,8 +18,8 @@ export interface Restaurant {
   id: string;
   restaurantName: string;
   description: string;
-  latitude: number;
-  longitude: number;
+  latitude?: number;
+  longitude?: number;
   priceRange: string;
   operatingHours: string;
   amenities: string;
@@ -36,6 +36,8 @@ export interface Restaurant {
 
 export interface UserProfile extends User {
   ownedRestaurants?: Restaurant[];
+  favouriteRestaurants?: Restaurant[];
+  blacklistedRestaurants?: Restaurant[];
   isOwner: boolean;
   isRestaurantOwner: boolean;
 }
@@ -82,6 +84,18 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
   const userId = localStorage.getItem('user_id');
   if (!userId) return null;
   return getUserProfile(userId);
+}
+
+export async function getMyProfile(): Promise<UserProfile | null> {
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/User/profile`, {
+      headers: getAuthHeaders(),
+    });
+    if (response.ok) return await response.json();
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 
