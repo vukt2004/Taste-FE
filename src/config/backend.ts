@@ -1,4 +1,4 @@
-export const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://tastemapbe.onrender.com';
+export const BACKEND_URL = 'https://localhost:7268';
 
 export const API_ENDPOINTS = {
   AUTH: {
@@ -36,6 +36,7 @@ export const API_ENDPOINTS = {
   RESTAURANTS: {
     CREATE: '/api/restaurant',
     UPDATE: (id: string) => `/api/restaurant/${id}`,
+    GET: (id: string) => `/api/restaurant/${id}`,
     CLAIM: (id: string) => `/api/restaurant/${id}/claim`,
     TOGGLE_EDIT: '/api/restaurant/toggle-edit',
     FILTER: '/api/restaurant/filter',

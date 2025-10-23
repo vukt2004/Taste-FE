@@ -1,4 +1,5 @@
 import { BACKEND_URL, API_ENDPOINTS } from '../config/backend';
+import { UserService } from './userService';
 
 export interface User {
   id: string;
@@ -52,7 +53,7 @@ export function getAuthHeaders(): HeadersInit {
 
 export async function getUserById(userId: string): Promise<User | null> {
   try {
-    const response = await fetch(`${BACKEND_URL}${API_ENDPOINTS.USER.GET_BY_ID}/${userId}`, {
+    const response = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.USER.GET_BY_ID}/${userId}`, {
       headers: getAuthHeaders(),
     });
     if (response.ok) return await response.json();
@@ -64,7 +65,7 @@ export async function getUserById(userId: string): Promise<User | null> {
 
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {
   try {
-    const response = await fetch(`${BACKEND_URL}${API_ENDPOINTS.USER.GET_PROFILE}/${userId}/profile`, {
+    const response = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.USER.GET_PROFILE}/${userId}/profile`, {
       headers: getAuthHeaders(),
     });
     if (response.ok) return await response.json();
@@ -88,7 +89,7 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
 
 export async function getMyProfile(): Promise<UserProfile | null> {
   try {
-    const response = await fetch(`${BACKEND_URL}/api/User/profile`, {
+    const response = await UserService.fetchWithAuth(`${BACKEND_URL}/api/User/profile`, {
       headers: getAuthHeaders(),
     });
     if (response.ok) return await response.json();

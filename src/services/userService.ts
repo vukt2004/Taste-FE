@@ -67,7 +67,7 @@ export class UserService {
 
       if (response.ok) {
         const data = await response.json();
-        if (data.isSuccess && data.data) {
+        if (data.success && data.data) {
           localStorage.setItem('auth_token', data.data.accessToken);
           if (data.data.refreshToken) {
             localStorage.setItem('refresh_token', data.data.refreshToken);
@@ -91,6 +91,26 @@ export class UserService {
     if (includeJson) headers['Content-Type'] = 'application/json';
     if (token) headers['Authorization'] = `Bearer ${token}`;
     return headers;
+  }
+
+  static async fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
+    const response = await fetch(url, options);
+    
+    // If unauthorized, try to refresh token
+    if (response.status === 401) {
+      const refreshSuccess = await this.refreshToken();
+      if (refreshSuccess) {
+        // Retry request with new token
+        const newHeaders = new Headers(options.headers);
+        const newToken = localStorage.getItem('auth_token');
+        if (newToken) {
+          newHeaders.set('Authorization', `Bearer ${newToken}`);
+        }
+        return fetch(url, { ...options, headers: newHeaders });
+      }
+    }
+    
+    return response;
   }
 
   static async getUserById(userId: string): Promise<User | null> {
@@ -126,22 +146,34 @@ export class UserService {
   }
 
   static async getCurrentUser(): Promise<User | null> {
+    // Check if user data is cached in localStorage
+    const cachedUserData = localStorage.getItem('user_data');
+    if (cachedUserData) {
+      try {
+        return JSON.parse(cachedUserData);
+      } catch {
+        // If parsing fails, remove cached data
+        localStorage.removeItem('user_data');
+      }
+    }
+    
     const userId = localStorage.getItem('user_id');
     if (!userId) return null;
     
-    // Kiểm tra token expiration và refresh nếu cần
+    // Check token expiration
     if (this.isTokenExpired()) {
       const refreshSuccess = await this.refreshToken();
       if (!refreshSuccess) {
-        // Nếu không thể refresh, xóa tất cả token
         localStorage.removeItem('auth_token');
         localStorage.removeItem('user_id');
         localStorage.removeItem('refresh_token');
         localStorage.removeItem('token_expires_at');
+        localStorage.removeItem('user_data');
         return null;
       }
     }
     
+    // Fallback to getUserById if no cached data
     return this.getUserById(userId);
   }
 

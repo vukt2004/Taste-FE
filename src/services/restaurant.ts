@@ -1,5 +1,6 @@
 import { BACKEND_URL, API_ENDPOINTS } from '../config/backend';
 import { getAuthHeaders } from './user';
+import { UserService } from './userService';
 
 export interface RestaurantFilter {
   latitude?: number;
@@ -30,8 +31,13 @@ export async function filterRestaurants(filter: RestaurantFilter) {
   return res.json();
 }
 
+export async function getRestaurantById(id: string) {
+  const res = await fetch(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANTS.GET(id)}`);
+  return res.json();
+}
+
 export async function createRestaurant(formData: FormData) {
-  const res = await fetch(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANTS.CREATE}`, {
+  const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANTS.CREATE}`, {
     method: 'POST',
     headers: getAuthHeaders(),
     body: formData,
@@ -40,7 +46,7 @@ export async function createRestaurant(formData: FormData) {
 }
 
 export async function updateRestaurant(id: string, formData: FormData) {
-  const res = await fetch(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANTS.UPDATE(id)}`, {
+  const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANTS.UPDATE(id)}`, {
     method: 'PUT',
     headers: getAuthHeaders(),
     body: formData,
@@ -49,7 +55,7 @@ export async function updateRestaurant(id: string, formData: FormData) {
 }
 
 export async function claimRestaurant(id: string) {
-  const res = await fetch(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANTS.CLAIM(id)}`, {
+  const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANTS.CLAIM(id)}`, {
     method: 'POST',
     headers: getAuthHeaders(),
   });
@@ -57,7 +63,7 @@ export async function claimRestaurant(id: string) {
 }
 
 export async function toggleRestaurantEdit(restaurantId: string, canEdit: boolean, reason?: string) {
-  const res = await fetch(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANTS.TOGGLE_EDIT}`, {
+  const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANTS.TOGGLE_EDIT}`, {
     method: 'POST',
     headers: {
       ...getAuthHeaders(),

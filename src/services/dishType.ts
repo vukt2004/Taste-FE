@@ -2,7 +2,8 @@ import { BACKEND_URL, API_ENDPOINTS } from '../config/backend';
 
 export async function listDishTypes() {
   const res = await fetch(`${BACKEND_URL}${API_ENDPOINTS.DISH_TYPES.LIST}`);
-  return res.json();
+  const data = await res.json();
+  return data;
 }
 
 export async function createDishType(payload: { typeName: string; description?: string; displayOrder?: number; isActive?: boolean }) {

@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { BACKEND_URL, API_ENDPOINTS } from '../../config/backend';
+import { listDishes } from '../../services/dish';
+import { listAmenities } from '../../services/amenity';
+import { listDishTypes } from '../../services/dishType';
+import { UserService } from '../../services/userService';
 
 type ContributionType = 'dish' | 'restaurant';
 
@@ -11,6 +15,11 @@ interface Amenity {
 interface Dish {
   id: string;
   name: string;
+}
+
+interface DishType {
+  id: string;
+  typeName: string;
 }
 
 interface ContributionsTabProps {
@@ -26,7 +35,10 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   
   // Dish form states
-  const [dishSearchTerm, setDishSearchTerm] = useState('');
+  const [dishName, setDishName] = useState('');
+  const [dishTypes, setDishTypes] = useState<DishType[]>([]);
+  const [selectedDishTypeIds, setSelectedDishTypeIds] = useState<string[]>([]);
+  const [dishTypeSearchTerm, setDishTypeSearchTerm] = useState('');
   
   // Restaurant form states
   const [restaurantName, setRestaurantName] = useState('');
@@ -41,6 +53,7 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [selectedDishIds, setSelectedDishIds] = useState<string[]>([]);
   const [amenitySearchTerm, setAmenitySearchTerm] = useState('');
+  const [dishSearchTerm, setDishSearchTerm] = useState('');
 
   const openModal = (type: ContributionType) => {
     setContributionType(type);
@@ -48,10 +61,6 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
     // Set default location from map center
     if (mapCenter && type === 'restaurant') {
       setSelectedLocation(mapCenter);
-    }
-    // Show center marker for restaurant contribution
-    if (type === 'restaurant') {
-      onShowCenterMarkerChange?.(true);
     }
   };
 
@@ -62,13 +71,22 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
     }
   }, [mapCenter, showModal, contributionType]);
 
+  // Show/hide center marker based on contribution type
+  useEffect(() => {
+    if (showModal && contributionType === 'restaurant') {
+      onShowCenterMarkerChange?.(true);
+    } else {
+      onShowCenterMarkerChange?.(false);
+    }
+  }, [showModal, contributionType, onShowCenterMarkerChange]);
+
   const closeModal = () => {
     setShowModal(false);
     setContributionType(null);
-    // Hide center marker
-    onShowCenterMarkerChange?.(false);
     // Reset form states
-    setDishSearchTerm('');
+    setDishName('');
+    setSelectedDishTypeIds([]);
+    setDishTypeSearchTerm('');
     setRestaurantName('');
     setRestaurantDescription('');
     setSelectedLocation(null);
@@ -79,6 +97,7 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
     setAmenitySearchTerm('');
     setImages([]);
     setSelectedDishIds([]);
+    setDishSearchTerm('');
     setSubmitError(null);
     setSubmitSuccess(null);
   };
@@ -87,11 +106,9 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
   useEffect(() => {
     const fetchAmenities = async () => {
       try {
-        const response = await fetch(`${BACKEND_URL}${API_ENDPOINTS.AMENITIES.LIST}`);
-        const data = await response.json();
-        if (response.ok && data.success && data.data) {
-          setAmenities(data.data);
-        }
+        const res = await listAmenities({ activeOnly: true });
+        const data = res?.data ?? res ?? [];
+        setAmenities(data);
       } catch {
         // Silently handle error
       }
@@ -99,15 +116,27 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
     fetchAmenities();
   }, []);
 
-  // Fetch dishes on component mount
+  // Fetch dish types on component mount
+  useEffect(() => {
+    const fetchDishTypes = async () => {
+      try {
+        const res = await listDishTypes();
+        const data = res?.data ?? res ?? [];
+        setDishTypes(data);
+      } catch {
+        // Silently handle error
+      }
+    };
+    fetchDishTypes();
+  }, []);
+
+  // Fetch dishes on component mount (for restaurant form only)
   useEffect(() => {
     const fetchDishes = async () => {
       try {
-        const response = await fetch(`${BACKEND_URL}${API_ENDPOINTS.DISHES.LIST}`);
-        const data = await response.json();
-        if (response.ok && data.success && data.data) {
-          setDishes(data.data);
-        }
+        const res = await listDishes();
+        const data = res?.data ?? res ?? [];
+        setDishes(data);
       } catch {
         // Silently handle error
       }
@@ -129,7 +158,8 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
           ...(token && { 'Authorization': `Bearer ${token}` }),
         },
         body: JSON.stringify({
-          dishIds: selectedDishIds
+          name: dishName,
+          typeIds: selectedDishTypeIds
         }),
       });
 
@@ -167,40 +197,46 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
 
       const token = localStorage.getItem('auth_token');
       
-      // Prepare JSON data for restaurant contribution
-      const contributionData = {
-        restaurantName,
-        description: restaurantDescription || undefined,
-        latitude: selectedLocation?.lat || undefined,
-        longitude: selectedLocation?.lng || undefined,
-        priceRange: priceRange || undefined,
-        operatingHours: formattedHours || undefined,
-        story: story || undefined,
-        amenities: formattedAmenities.length > 0 ? JSON.stringify(formattedAmenities) : undefined,
-        dishIds: selectedDishIds.length > 0 ? JSON.stringify(selectedDishIds) : undefined,
-        images: images.length > 0 ? JSON.stringify(images.map(img => URL.createObjectURL(img))) : undefined
-      };
+      // Prepare FormData
+      const formData = new FormData();
+      formData.append('restaurantName', restaurantName);
+      if (restaurantDescription) formData.append('description', restaurantDescription);
+      if (selectedLocation?.lat) formData.append('latitude', selectedLocation.lat.toString());
+      if (selectedLocation?.lng) formData.append('longitude', selectedLocation.lng.toString());
+      if (priceRange) formData.append('priceRange', priceRange);
+      if (formattedHours) formData.append('operatingHours', formattedHours);
+      if (story) formData.append('story', story);
+      if (formattedAmenities.length > 0) formData.append('amenities', JSON.stringify(formattedAmenities));
+      if (selectedDishIds.length > 0) formData.append('dishIds', JSON.stringify(selectedDishIds));
+      
+      // Add images
+      images.forEach(image => {
+        formData.append('images', image);
+      });
 
       const headers: HeadersInit = {
-        'Content-Type': 'application/json',
         ...(token && { 'Authorization': `Bearer ${token}` }),
       };
 
-      const response = await fetch(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANT_CONTRIBUTION.CREATE}`, {
+      const response = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANT_CONTRIBUTION.CREATE}`, {
         method: 'POST',
         headers,
-        body: JSON.stringify(contributionData),
+        body: formData,
       });
 
       const data = await response.json();
 
-      if (response.ok && data.success) {
+      if (response.ok && (data.isSuccess || data.success)) {
         setSubmitSuccess('Đã gửi yêu cầu đóng góp nhà hàng thành công!');
         setTimeout(() => {
           closeModal();
         }, 2000);
       } else {
-        setSubmitError(data.message || 'Gửi yêu cầu thất bại');
+        if (response.status === 401) {
+          setSubmitError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        } else {
+          setSubmitError(data.message || 'Gửi yêu cầu thất bại');
+        }
       }
     } catch {
       setSubmitError('Lỗi kết nối. Vui lòng thử lại.');
@@ -224,57 +260,56 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-semibold text-gray-700">Đóng góp</h3>
-      <div className="space-y-2">
-        <button
-          onClick={() => openModal('dish')}
-          className="w-full p-4 bg-white rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-colors text-left"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-              <span className="text-green-600 text-lg">🍜</span>
+      
+      {!showModal ? (
+        <div className="space-y-2">
+          <button
+            onClick={() => openModal('dish')}
+            className="w-full p-4 bg-white rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-colors text-left"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                <span className="text-green-600 text-lg">🍜</span>
+              </div>
+              <div>
+                <div className="font-medium text-gray-800">Đóng góp món ăn</div>
+                <div className="text-xs text-gray-500">Gửi đề xuất món ăn mới</div>
+              </div>
             </div>
-            <div>
-              <div className="font-medium text-gray-800">Đóng góp món ăn</div>
-              <div className="text-xs text-gray-500">Gửi đề xuất món ăn mới</div>
+          </button>
+
+          <button
+            onClick={() => openModal('restaurant')}
+            className="w-full p-4 bg-white rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-colors text-left"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                <span className="text-blue-600 text-lg">🏪</span>
+              </div>
+              <div>
+                <div className="font-medium text-gray-800">Đóng góp nhà hàng</div>
+                <div className="text-xs text-gray-500">Thêm nhà hàng mới vào hệ thống</div>
+              </div>
             </div>
+          </button>
+        </div>
+      ) : (
+        <div className="bg-white rounded-lg shadow-lg">
+          {/* Modal Header */}
+          <div className="flex items-center justify-between p-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-800">
+              {contributionType === 'dish' ? 'Đóng góp món ăn' : 'Đóng góp nhà hàng'}
+            </h2>
+            <button
+              onClick={closeModal}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              ✕
+            </button>
           </div>
-        </button>
 
-        <button
-          onClick={() => openModal('restaurant')}
-          className="w-full p-4 bg-white rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-colors text-left"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-              <span className="text-blue-600 text-lg">🏪</span>
-            </div>
-            <div>
-              <div className="font-medium text-gray-800">Đóng góp nhà hàng</div>
-              <div className="text-xs text-gray-500">Thêm nhà hàng mới vào hệ thống</div>
-            </div>
-          </div>
-        </button>
-      </div>
-
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style={{ zIndex: 9999 }}>
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto m-4">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-800">
-                {contributionType === 'dish' ? 'Đóng góp món ăn' : 'Đóng góp nhà hàng'}
-              </h2>
-              <button
-                onClick={closeModal}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="p-4">
+          {/* Modal Body */}
+          <div className="p-4 max-h-[60vh] overflow-y-auto">
               {(submitError || submitSuccess) && (
                 <div className={`mb-4 p-3 border rounded text-sm ${
                   submitError 
@@ -287,42 +322,67 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
 
               {contributionType === 'dish' ? (
                 <div className="space-y-4">
+                  {/* Tên món ăn */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Chọn món ăn có sẵn <span className="text-red-500">*</span>
+                      Tên món ăn <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
-                      value={dishSearchTerm}
-                      onChange={(e) => setDishSearchTerm(e.target.value)}
+                      value={dishName}
+                      onChange={(e) => setDishName(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Tìm kiếm món ăn..."
+                      placeholder="Ví dụ: Phở Bò Đặc Biệt"
                     />
-                    <div className="max-h-40 overflow-y-auto border border-gray-300 rounded-md p-2 space-y-2 mt-2">
-                      {dishes.length === 0 ? (
+                  </div>
+
+                  {/* Loại món ăn */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Loại món ăn <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={dishTypeSearchTerm}
+                      onChange={(e) => setDishTypeSearchTerm(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2"
+                      placeholder="Tìm kiếm loại món ăn..."
+                    />
+                    <div className="max-h-48 overflow-y-auto border border-gray-300 rounded-md p-2 space-y-2">
+                      {dishTypes.length === 0 ? (
                         <div className="text-xs text-gray-400 text-center py-2">Đang tải...</div>
                       ) : (
-                        dishes
-                          .filter(dish => dish.name.toLowerCase().includes(dishSearchTerm.toLowerCase()))
-                          .map((dish) => (
-                            <label key={dish.id} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
-                              <input
-                                type="checkbox"
-                                checked={selectedDishIds.includes(dish.id)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedDishIds([...selectedDishIds, dish.id]);
-                                  } else {
-                                    setSelectedDishIds(selectedDishIds.filter(id => id !== dish.id));
-                                  }
-                                }}
-                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                              />
-                              <span className="text-sm text-gray-700">{dish.name}</span>
-                            </label>
-                          ))
+                        <>
+                          {dishTypes
+                            .filter(dishType => dishType.typeName.toLowerCase().includes(dishTypeSearchTerm.toLowerCase()))
+                            .map((dishType) => (
+                              <label key={dishType.id} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedDishTypeIds.includes(dishType.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedDishTypeIds([...selectedDishTypeIds, dishType.id]);
+                                    } else {
+                                      setSelectedDishTypeIds(selectedDishTypeIds.filter(id => id !== dishType.id));
+                                    }
+                                  }}
+                                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <span className="text-sm text-gray-700">{dishType.typeName}</span>
+                              </label>
+                            ))}
+                        </>
+                      )}
+                      {dishTypes.length > 0 && dishTypes.filter(dt => dt.typeName.toLowerCase().includes(dishTypeSearchTerm.toLowerCase())).length === 0 && (
+                        <div className="text-xs text-gray-400 text-center py-2">Không tìm thấy</div>
                       )}
                     </div>
+                    {selectedDishTypeIds.length > 0 && (
+                      <div className="mt-2 text-xs text-gray-600">
+                        Đã chọn {selectedDishTypeIds.length} loại món ăn
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex space-x-2">
@@ -335,7 +395,7 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
                     </button>
                     <button
                       onClick={handleSubmitDish}
-                      disabled={selectedDishIds.length === 0 || isSubmitting}
+                      disabled={!dishName.trim() || selectedDishTypeIds.length === 0 || isSubmitting}
                       className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                       {isSubmitting ? 'Đang gửi...' : 'Gửi yêu cầu'}
@@ -417,27 +477,37 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
                       {amenities.length === 0 ? (
                         <div className="text-xs text-gray-400 text-center py-2">Đang tải...</div>
                       ) : (
-                        amenities
-                          .filter(amenity => amenity.name.toLowerCase().includes(amenitySearchTerm.toLowerCase()))
-                          .map((amenity) => (
-                            <label key={amenity.id} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
-                              <input
-                                type="checkbox"
-                                checked={selectedAmenityIds.includes(amenity.id)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedAmenityIds([...selectedAmenityIds, amenity.id]);
-                                  } else {
-                                    setSelectedAmenityIds(selectedAmenityIds.filter(id => id !== amenity.id));
-                                  }
-                                }}
-                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                              />
-                              <span className="text-sm text-gray-700">{amenity.name}</span>
-                            </label>
-                          ))
+                        <>
+                          {amenities
+                            .filter(amenity => amenity.name.toLowerCase().includes(amenitySearchTerm.toLowerCase()))
+                            .map((amenity) => (
+                              <label key={amenity.id} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedAmenityIds.includes(amenity.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedAmenityIds([...selectedAmenityIds, amenity.id]);
+                                    } else {
+                                      setSelectedAmenityIds(selectedAmenityIds.filter(id => id !== amenity.id));
+                                    }
+                                  }}
+                                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <span className="text-sm text-gray-700">{amenity.name}</span>
+                              </label>
+                            ))}
+                        </>
+                      )}
+                      {amenities.length > 0 && amenities.filter(a => a.name.toLowerCase().includes(amenitySearchTerm.toLowerCase())).length === 0 && (
+                        <div className="text-xs text-gray-400 text-center py-2">Không tìm thấy</div>
                       )}
                     </div>
+                    {selectedAmenityIds.length > 0 && (
+                      <div className="mt-2 text-xs text-gray-600">
+                        Đã chọn {selectedAmenityIds.length} tiện nghi
+                      </div>
+                    )}
                   </div>
 
                   {/* 6. Chọn món ăn */}
@@ -541,7 +611,7 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
                             <img
                               src={URL.createObjectURL(img)}
                               alt={`Preview ${index + 1}`}
-                              className="w-full h-24 object-cover rounded border border-gray-300"
+                              className="w-auto max-h-[200px] object-contain rounded border border-gray-300"
                             />
                             <button
                               type="button"
@@ -590,7 +660,6 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
                   </div>
                 </div>
               )}
-            </div>
           </div>
         </div>
       )}

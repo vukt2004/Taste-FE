@@ -1,5 +1,6 @@
 import { BACKEND_URL, API_ENDPOINTS } from '../config/backend';
 import { getAuthHeaders } from './user';
+import { UserService } from './userService';
 
 export async function listDishes(params?: { searchTerm?: string; categoryId?: string; signatureOnly?: boolean }) {
   const url = new URL(`${BACKEND_URL}${API_ENDPOINTS.DISHES.LIST}`);
@@ -16,7 +17,7 @@ export async function dishDetail(id: string) {
 }
 
 export async function createDish(payload: { name: string; description?: string; tags?: string; typeIds?: string[] }) {
-  const res = await fetch(`${BACKEND_URL}${API_ENDPOINTS.DISHES.LIST}`, {
+  const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.DISHES.LIST}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -28,7 +29,7 @@ export async function createDish(payload: { name: string; description?: string; 
 }
 
 export async function addDishCategories(dishId: string, typeIds: string[]) {
-  const res = await fetch(`${BACKEND_URL}/api/dish/${dishId}/categories/add`, {
+  const res = await UserService.fetchWithAuth(`${BACKEND_URL}/api/dish/${dishId}/categories/add`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -40,7 +41,7 @@ export async function addDishCategories(dishId: string, typeIds: string[]) {
 }
 
 export async function removeDishCategories(dishId: string, typeIds: string[]) {
-  const res = await fetch(`${BACKEND_URL}/api/dish/${dishId}/categories/remove`, {
+  const res = await UserService.fetchWithAuth(`${BACKEND_URL}/api/dish/${dishId}/categories/remove`, {
     method: 'DELETE',
     headers: {
       'Content-Type': 'application/json',

@@ -7,6 +7,14 @@ import CommentsTab from './Sidebar/CommentsTab';
 import ContributionsTab from './Sidebar/ContributionsTab';
 import UserTab from './Sidebar/UserTab';
 
+interface Restaurant {
+  id: string;
+  restaurantName: string;
+  description?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
 interface SidebarProps {
   user: User | null;
   isOpen: boolean;
@@ -16,14 +24,29 @@ interface SidebarProps {
   onUserChange?: (user: User | null) => void;
   onNavigateToRestaurant?: (restaurantId: string, lat: number, lng: number) => void;
   onShowCenterMarkerChange?: (show: boolean) => void;
+  selectedRestaurant?: Restaurant | null;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ user, isOpen, onToggle, onFilterChange, mapCenter, onUserChange, onNavigateToRestaurant, onShowCenterMarkerChange }) => {
+const Sidebar: React.FC<SidebarProps> = ({ user, isOpen, onToggle, onFilterChange, mapCenter, onUserChange, onNavigateToRestaurant, onShowCenterMarkerChange, selectedRestaurant }) => {
   const [activeTab, setActiveTab] = useState<'explore' | 'comments' | 'contributions' | 'user'>('explore');
 
   const handleFilterChange = (filter: RestaurantFilter) => {
     if (onFilterChange) onFilterChange(filter);
   };
+
+  // Auto switch to comments tab when restaurant is selected
+  React.useEffect(() => {
+    if (selectedRestaurant) {
+      setActiveTab('comments');
+    }
+  }, [selectedRestaurant]);
+
+  // Hide center marker when switching away from contributions tab
+  React.useEffect(() => {
+    if (activeTab !== 'contributions') {
+      onShowCenterMarkerChange?.(false);
+    }
+  }, [activeTab, onShowCenterMarkerChange]);
 
   return (
     <div
@@ -56,7 +79,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, isOpen, onToggle, onFilterChang
         ${isOpen ? 'opacity-100 visible' : 'opacity-0 invisible'} transition-opacity duration-300`}
       >
         {activeTab === 'explore' && <ExploreTab onFilterChange={handleFilterChange} mapCenter={mapCenter} />}
-        {activeTab === 'comments' && <CommentsTab />}
+        {activeTab === 'comments' && <CommentsTab restaurant={selectedRestaurant} />}
         {activeTab === 'contributions' && <ContributionsTab mapCenter={mapCenter} onShowCenterMarkerChange={onShowCenterMarkerChange} />}
         {activeTab === 'user' && <UserTab user={user} onUserChange={onUserChange} onNavigateToRestaurant={onNavigateToRestaurant} />}
       </div>

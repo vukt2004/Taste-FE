@@ -1,10 +1,11 @@
 import { BACKEND_URL, API_ENDPOINTS } from '../config/backend';
 import { getAuthHeaders } from './user';
+import { UserService } from './userService';
 
 export async function uploadReviewImages(files: File[]): Promise<string[]> {
   const form = new FormData();
   files.forEach(f => form.append('images', f));
-  const res = await fetch(`${BACKEND_URL}${API_ENDPOINTS.REVIEWS.UPLOAD_IMAGES}`, {
+  const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.REVIEWS.UPLOAD_IMAGES}`, {
     method: 'POST',
     headers: getAuthHeaders(),
     body: form as any,
@@ -14,7 +15,7 @@ export async function uploadReviewImages(files: File[]): Promise<string[]> {
 }
 
 export async function createReview(payload: unknown) {
-  const res = await fetch(`${BACKEND_URL}${API_ENDPOINTS.REVIEWS.CREATE}`, {
+  const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.REVIEWS.CREATE}`, {
     method: 'POST',
     headers: {
       ...getAuthHeaders(),
@@ -26,7 +27,7 @@ export async function createReview(payload: unknown) {
 }
 
 export async function toggleReviewLike(reviewId: string) {
-  const res = await fetch(`${BACKEND_URL}${API_ENDPOINTS.REVIEWS.LIKE(reviewId)}`, {
+  const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.REVIEWS.LIKE(reviewId)}`, {
     method: 'POST',
     headers: getAuthHeaders(),
   });
@@ -34,7 +35,7 @@ export async function toggleReviewLike(reviewId: string) {
 }
 
 export async function toggleReviewDislike(reviewId: string) {
-  const res = await fetch(`${BACKEND_URL}${API_ENDPOINTS.REVIEWS.TOGGLE_DISLIKE(reviewId)}`, {
+  const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.REVIEWS.TOGGLE_DISLIKE(reviewId)}`, {
     method: 'POST',
     headers: getAuthHeaders(),
   });

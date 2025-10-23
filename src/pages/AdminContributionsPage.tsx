@@ -48,6 +48,8 @@ const AdminContributionsPage: React.FC = () => {
   const [contributionType, setContributionType] = useState<'dish' | 'restaurant'>('dish');
   const [adminNotes, setAdminNotes] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [amenities, setAmenities] = useState<Array<{ id: string; name: string }>>([]);
+  const [dishes, setDishes] = useState<Array<{ id: string; name: string }>>([]);
 
   useEffect(() => {
     // Check if user is admin
@@ -66,7 +68,37 @@ const AdminContributionsPage: React.FC = () => {
 
   useEffect(() => {
     loadContributions();
+    loadAmenities();
+    loadDishes();
   }, []);
+
+  const loadAmenities = async () => {
+    try {
+      const response = await fetch(`${BACKEND_URL}${API_ENDPOINTS.AMENITIES.LIST}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.data) {
+          setAmenities(data.data.map((a: { id: string; name: string }) => ({ id: a.id, name: a.name })));
+        }
+      }
+    } catch {
+      // Ignore errors
+    }
+  };
+
+  const loadDishes = async () => {
+    try {
+      const response = await fetch(`${BACKEND_URL}${API_ENDPOINTS.DISHES.LIST}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.data) {
+          setDishes(data.data.map((d: { id: string; name: string }) => ({ id: d.id, name: d.name })));
+        }
+      }
+    } catch {
+      // Ignore errors
+    }
+  };
 
   const loadContributions = async () => {
     try {
@@ -80,11 +112,16 @@ const AdminContributionsPage: React.FC = () => {
         },
       });
 
+      console.log('Dish contributions response:', dishResponse.status, dishResponse.statusText);
+
       if (dishResponse.ok) {
         const dishData = await dishResponse.json();
-        if (dishData.success) {
-          setDishContributions(dishData.data);
+        console.log('Dish contributions data:', dishData);
+        if (dishData.isSuccess || dishData.success) {
+          setDishContributions(dishData.data || []);
         }
+      } else {
+        console.error('Failed to load dish contributions:', await dishResponse.text());
       }
 
       // Load restaurant contributions
@@ -94,11 +131,16 @@ const AdminContributionsPage: React.FC = () => {
         },
       });
 
+      console.log('Restaurant contributions response:', restaurantResponse.status, restaurantResponse.statusText);
+
       if (restaurantResponse.ok) {
         const restaurantData = await restaurantResponse.json();
-        if (restaurantData.success) {
-          setRestaurantContributions(restaurantData.data);
+        console.log('Restaurant contributions data:', restaurantData);
+        if (restaurantData.isSuccess || restaurantData.success) {
+          setRestaurantContributions(restaurantData.data || []);
         }
+      } else {
+        console.error('Failed to load restaurant contributions:', await restaurantResponse.text());
       }
     } catch (error) {
       console.error('Error loading contributions:', error);
@@ -127,7 +169,7 @@ const AdminContributionsPage: React.FC = () => {
       });
 
       const data = await response.json();
-      if (response.ok && data.success) {
+      if (response.ok && (data.isSuccess || data.success)) {
         await loadContributions();
         setSelectedContribution(null);
         setAdminNotes('');
@@ -163,7 +205,7 @@ const AdminContributionsPage: React.FC = () => {
       });
 
       const data = await response.json();
-      if (response.ok && data.success) {
+      if (response.ok && (data.isSuccess || data.success)) {
         await loadContributions();
         setSelectedContribution(null);
         setAdminNotes('');
@@ -252,7 +294,7 @@ const AdminContributionsPage: React.FC = () => {
             ) : (
               <>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Tên nhà hàng:</label>
+                  <label className="text-sm font-medium text-gray-700">Tên quán ăn:</label>
                   <p className="text-gray-900">{(selectedContribution as RestaurantContribution).restaurantName}</p>
                 </div>
                 
@@ -290,6 +332,69 @@ const AdminContributionsPage: React.FC = () => {
                     <p className="text-gray-900">
                       {(selectedContribution as RestaurantContribution).latitude}, {(selectedContribution as RestaurantContribution).longitude}
                     </p>
+                  </div>
+                )}
+                
+                {(selectedContribution as RestaurantContribution).amenities && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Tiện nghi:</label>
+                    <div className="text-gray-900">
+                      {(() => {
+                        try {
+                          const amenityIds = JSON.parse((selectedContribution as RestaurantContribution).amenities || '[]');
+                          if (Array.isArray(amenityIds)) {
+                            const amenityNames = amenityIds
+                              .map((a: { amenityId?: string } | string) => typeof a === 'object' ? a.amenityId : a)
+                              .map((id: string | undefined) => id ? amenities.find(a => a.id === id)?.name || id : '')
+                              .filter((name: string) => name);
+                            return amenityNames.length > 0 ? amenityNames.join(', ') : 'Không có';
+                          }
+                          return '';
+                        } catch {
+                          return (selectedContribution as RestaurantContribution).amenities;
+                        }
+                      })()}
+                    </div>
+                  </div>
+                )}
+                
+                {(selectedContribution as RestaurantContribution).dishIds && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Món ăn:</label>
+                    <div className="text-gray-900">
+                      {(() => {
+                        try {
+                          const dishIds = JSON.parse((selectedContribution as RestaurantContribution).dishIds || '[]');
+                          if (Array.isArray(dishIds)) {
+                            const dishNames = dishIds
+                              .map((id: string) => dishes.find(d => d.id === id)?.name || id)
+                              .filter((name: string) => name);
+                            return dishNames.length > 0 ? dishNames.join(', ') : 'Không có';
+                          }
+                          return '';
+                        } catch {
+                          return (selectedContribution as RestaurantContribution).dishIds;
+                        }
+                      })()}
+                    </div>
+                  </div>
+                )}
+                
+                {(selectedContribution as RestaurantContribution).images && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Hình ảnh:</label>
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      {(() => {
+                        try {
+                          const images = JSON.parse((selectedContribution as RestaurantContribution).images || '[]');
+                          return Array.isArray(images) ? images.map((img: string, idx: number) => (
+                            <img key={idx} src={img} alt={`Image ${idx + 1}`} className="w-auto max-h-[200px] object-contain rounded" />
+                          )) : null;
+                        } catch {
+                          return null;
+                        }
+                      })()}
+                    </div>
                   </div>
                 )}
               </>
@@ -372,7 +477,7 @@ const AdminContributionsPage: React.FC = () => {
                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
             }`}
           >
-            Nhà hàng ({restaurantContributions.length})
+            Quán ăn ({restaurantContributions.length})
           </button>
         </div>
         
@@ -405,7 +510,7 @@ const AdminContributionsPage: React.FC = () => {
             )
           ) : (
             restaurantContributions.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">Chưa có đóng góp nhà hàng nào</p>
+              <p className="text-gray-500 text-center py-4">Chưa có đóng góp quán ăn nào</p>
             ) : (
               restaurantContributions.map((contribution) => (
                 <div

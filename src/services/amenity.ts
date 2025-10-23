@@ -12,6 +12,7 @@ export async function listAmenities(params?: { activeOnly?: boolean }) {
     url.searchParams.set('activeOnly', String(params.activeOnly));
   }
   const res = await fetch(url.toString());
-  return res.json();
+  const data = await res.json();
+  return data;
 }
 

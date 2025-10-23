@@ -56,6 +56,27 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter }) =>
   const [isSearching, setIsSearching] = useState(false);
   const [searchResult, setSearchResult] = useState<{ data?: unknown[] } | null>(null);
   const prevMapCenterRef = useRef<{ lat: number; lng: number } | undefined>(undefined);
+  
+  // Additional filters
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [priceRange, setPriceRange] = useState('');
+  const [dishSearchTerm, setDishSearchTerm] = useState('');
+  
+  // Collapsible sections
+  const [expandedSections, setExpandedSections] = useState({
+    search: true,
+    price: true,
+    categories: true,
+    dishes: true,
+    amenities: true,
+  });
+  
+  const toggleSection = (section: keyof typeof expandedSections) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
 
   useEffect(() => {
     const loadDishTypes = async () => {
@@ -112,17 +133,19 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter }) =>
         // Debounce để tránh quá nhiều calls khi di chuyển map
         const timeoutId = setTimeout(() => {
           const bbox = calculateBoundingBox(mapCenter.lat, mapCenter.lng, RADIUS_KM);
-          const filter: RestaurantFilter = {
-            verifiedOnly: true,
-            activeOnly: true,
-            limit: 500,
-            dishIds: selectedDishIds.size > 0 ? Array.from(selectedDishIds) : undefined,
-            amenityIds: selectedAmenityIds.size > 0 ? Array.from(selectedAmenityIds) : undefined,
-            southWestLat: bbox.southWestLat,
-            southWestLng: bbox.southWestLng,
-            northEastLat: bbox.northEastLat,
-            northEastLng: bbox.northEastLng,
-          };
+        const filter: RestaurantFilter = {
+          verifiedOnly: true,
+          activeOnly: true,
+          limit: 500,
+          dishIds: selectedDishIds.size > 0 ? Array.from(selectedDishIds) : undefined,
+          amenityIds: selectedAmenityIds.size > 0 ? Array.from(selectedAmenityIds) : undefined,
+          searchKeyword: searchKeyword.trim() || undefined,
+          priceRange: priceRange.trim() || undefined,
+          southWestLat: bbox.southWestLat,
+          southWestLng: bbox.southWestLng,
+          northEastLat: bbox.northEastLat,
+          northEastLng: bbox.northEastLng,
+        };
           
           console.log('MapCenter thay đổi, cập nhật filter với bounding box mới:', bbox);
           onFilterChange(filter);
@@ -148,6 +171,8 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter }) =>
       limit: 500,
       dishIds: selectedDishIds.size > 0 ? Array.from(selectedDishIds) : undefined,
       amenityIds: selectedAmenityIds.size > 0 ? Array.from(selectedAmenityIds) : undefined,
+      searchKeyword: searchKeyword.trim() || undefined,
+      priceRange: priceRange.trim() || undefined,
     };
     
     // Thêm thông tin vùng địa lý nếu có mapCenter
@@ -203,6 +228,33 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter }) =>
     </div>
   );
 
+  const collapsibleSection = (
+    title: string,
+    sectionKey: keyof typeof expandedSections,
+    content: React.ReactNode,
+    actions?: React.ReactNode
+  ) => (
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <div
+        className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200 rounded-t-md cursor-pointer hover:from-gray-100 hover:to-gray-150 transition-colors"
+        onClick={() => toggleSection(sectionKey)}
+      >
+        <h3 className="text-[11px] font-bold text-gray-600 uppercase tracking-wide">{title}</h3>
+        <div className="flex items-center gap-2">
+          {actions && <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>{actions}</div>}
+          <span className="text-gray-500 text-xs">
+            {expandedSections[sectionKey] ? '▼' : '▶'}
+          </span>
+        </div>
+      </div>
+      {expandedSections[sectionKey] && (
+        <div className="transition-all duration-200">
+          {content}
+        </div>
+      )}
+    </div>
+  );
+
   const inputStyle =
     'w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 bg-white shadow-sm';
 
@@ -228,113 +280,160 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter }) =>
         )}
       </div>
 
-      {/* DANH MỤC */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        {sectionHeader('Danh mục', (
-          <button onClick={() => setSelectedDishTypeIds(new Set())} className="text-[11px] text-gray-500 hover:text-blue-500 transition-colors">
-            Clear
-          </button>
-        ))}
-        <div className="p-2">
+      {/* Tìm kiếm từ khóa */}
+      {collapsibleSection(
+        'Tìm kiếm',
+        'search',
+        <div className="p-3">
           <input
             type="text"
-            placeholder="Tìm danh mục..."
-            value={categorySearch}
-            onChange={(e) => setCategorySearch(e.target.value)}
+            placeholder="Tìm theo tên nhà hàng..."
+            value={searchKeyword}
+            onChange={(e) => setSearchKeyword(e.target.value)}
             className={inputStyle}
           />
         </div>
-        <div className="grid grid-cols-2 gap-1 px-2 pb-2 max-h-60 overflow-y-auto">
-          {dishTypes
-            .filter(dt => !categorySearch || dt.typeName.toLowerCase().includes(categorySearch.toLowerCase()))
-            .map(dt => (
-              <div
-                key={dt.id}
-                className={itemStyle(selectedDishTypeIds.has(dt.id))}
-                onClick={() => handleToggleSet(setSelectedDishTypeIds, dt.id)}
-              >
-                {dt.typeName}
-              </div>
-            ))}
+      )}
+
+      {/* Khoảng giá */}
+      {collapsibleSection(
+        'Khoảng giá',
+        'price',
+        <div className="p-3">
+          <input
+            type="text"
+            placeholder="Ví dụ: 50000-100000"
+            value={priceRange}
+            onChange={(e) => setPriceRange(e.target.value)}
+            className={inputStyle}
+          />
         </div>
-      </div>
+      )}
+
+      {/* DANH MỤC */}
+      {collapsibleSection(
+        'Danh mục',
+        'categories',
+        <>
+          <div className="p-2">
+            <input
+              type="text"
+              placeholder="Tìm danh mục..."
+              value={categorySearch}
+              onChange={(e) => setCategorySearch(e.target.value)}
+              className={inputStyle}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-1 px-2 pb-2 max-h-60 overflow-y-auto">
+            {dishTypes
+              .filter(dt => !categorySearch || dt.typeName.toLowerCase().includes(categorySearch.toLowerCase()))
+              .map(dt => (
+                <div
+                  key={dt.id}
+                  className={itemStyle(selectedDishTypeIds.has(dt.id))}
+                  onClick={() => handleToggleSet(setSelectedDishTypeIds, dt.id)}
+                >
+                  {dt.typeName}
+                </div>
+              ))}
+          </div>
+        </>,
+        <button onClick={() => setSelectedDishTypeIds(new Set())} className="text-[11px] text-gray-500 hover:text-blue-500 transition-colors">
+          Clear
+        </button>
+      )}
 
       {/* MÓN ĂN */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        {sectionHeader('Món ăn', (
-          <>
-            <button
-              onClick={() => setSelectedDishIds(new Set(availableDishes.map(d => d.dishId)))}
-              className="text-[11px] text-gray-500 hover:text-blue-500 transition-colors"
-            >
-              Select All
-            </button>
-            <button
-              onClick={() => setSelectedDishIds(new Set())}
-              className="text-[11px] text-gray-500 hover:text-blue-500 transition-colors"
-            >
-              Clear
-            </button>
-          </>
-        ))}
-        <div className="grid grid-cols-2 gap-1 p-2 max-h-72 overflow-y-auto">
-          {availableDishes.length === 0 ? (
-            <div className="col-span-2 text-center text-gray-400 text-sm py-6">Không có món ăn</div>
-          ) : (
-            availableDishes.map(d => (
-              <div
-                key={d.dishId}
-                className={itemStyle(selectedDishIds.has(d.dishId))}
-                onClick={() => handleToggleSet(setSelectedDishIds, d.dishId)}
-              >
-                {d.dishName}
-              </div>
-            ))
-          )}
-        </div>
-      </div>
+      {collapsibleSection(
+        'Món ăn',
+        'dishes',
+        <>
+          <div className="p-2">
+            <input
+              type="text"
+              placeholder="Tìm món ăn..."
+              value={dishSearchTerm}
+              onChange={(e) => setDishSearchTerm(e.target.value)}
+              className={inputStyle}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-1 px-2 pb-2 max-h-72 overflow-y-auto">
+            {availableDishes.length === 0 ? (
+              <div className="col-span-2 text-center text-gray-400 text-sm py-6">Không có món ăn</div>
+            ) : (
+              availableDishes
+                .filter(d => !dishSearchTerm || d.dishName.toLowerCase().includes(dishSearchTerm.toLowerCase()))
+                .map(d => (
+                  <div
+                    key={d.dishId}
+                    className={itemStyle(selectedDishIds.has(d.dishId))}
+                    onClick={() => handleToggleSet(setSelectedDishIds, d.dishId)}
+                  >
+                    {d.dishName}
+                  </div>
+                ))
+            )}
+          </div>
+        </>,
+        <>
+          <button
+            onClick={() => setSelectedDishIds(new Set(availableDishes.map(d => d.dishId)))}
+            className="text-[11px] text-gray-500 hover:text-blue-500 transition-colors"
+          >
+            Select All
+          </button>
+          <button
+            onClick={() => setSelectedDishIds(new Set())}
+            className="text-[11px] text-gray-500 hover:text-blue-500 transition-colors"
+          >
+            Clear
+          </button>
+        </>
+      )}
 
       {/* TIỆN ÍCH */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        {sectionHeader('Tiện ích', (
-          <>
-            <button
-              onClick={() => setSelectedAmenityIds(new Set(amenities.map(a => a.id)))}
-              className="text-[11px] text-gray-500 hover:text-blue-500 transition-colors"
-            >
-              Select All
-            </button>
-            <button
-              onClick={() => setSelectedAmenityIds(new Set())}
-              className="text-[11px] text-gray-500 hover:text-blue-500 transition-colors"
-            >
-              Clear
-            </button>
-          </>
-        ))}
-        <div className="p-2">
-          <input
-            type="text"
-            placeholder="Tìm tiện ích..."
-            value={amenitySearch}
-            onChange={(e) => setAmenitySearch(e.target.value)}
-            className={inputStyle}
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-1 px-2 pb-2 max-h-60 overflow-y-auto">
-          {amenities
-            .filter(a => !amenitySearch || a.name.toLowerCase().includes(amenitySearch.toLowerCase()))
-            .map(a => (
-              <div
-                key={a.id}
-                className={itemStyle(selectedAmenityIds.has(a.id))}
-                onClick={() => handleToggleSet(setSelectedAmenityIds, a.id)}
-              >
-                {a.name}
-              </div>
-            ))}
-        </div>
-      </div>
+      {collapsibleSection(
+        'Tiện ích',
+        'amenities',
+        <>
+          <div className="p-2">
+            <input
+              type="text"
+              placeholder="Tìm tiện ích..."
+              value={amenitySearch}
+              onChange={(e) => setAmenitySearch(e.target.value)}
+              className={inputStyle}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-1 px-2 pb-2 max-h-60 overflow-y-auto">
+            {amenities
+              .filter(a => !amenitySearch || a.name.toLowerCase().includes(amenitySearch.toLowerCase()))
+              .map(a => (
+                <div
+                  key={a.id}
+                  className={itemStyle(selectedAmenityIds.has(a.id))}
+                  onClick={() => handleToggleSet(setSelectedAmenityIds, a.id)}
+                >
+                  {a.name}
+                </div>
+              ))}
+          </div>
+        </>,
+        <>
+          <button
+            onClick={() => setSelectedAmenityIds(new Set(amenities.map(a => a.id)))}
+            className="text-[11px] text-gray-500 hover:text-blue-500 transition-colors"
+          >
+            Select All
+          </button>
+          <button
+            onClick={() => setSelectedAmenityIds(new Set())}
+            className="text-[11px] text-gray-500 hover:text-blue-500 transition-colors"
+          >
+            Clear
+          </button>
+        </>
+      )}
     </div>
   );
 };

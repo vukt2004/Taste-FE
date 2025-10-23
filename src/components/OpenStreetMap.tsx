@@ -16,6 +16,7 @@ interface OpenStreetMapProps {
   className?: string;
   markers?: { lat: number; lng: number; title?: string; description?: string }[];
   showCenterMarker?: boolean;
+  onMarkerClick?: (lat: number, lng: number, title?: string) => void;
 }
 
 // Component con để lấy map instance và gọi onMapLoad
@@ -28,16 +29,50 @@ const MapInstanceHandler: React.FC<{ onMapLoad?: (map: L.Map) => void; showCente
     }
   }, [map, onMapLoad]);
 
+  // Load saved map position from localStorage
+  React.useEffect(() => {
+    if (map) {
+      const savedCenter = localStorage.getItem('map_center');
+      const savedZoom = localStorage.getItem('map_zoom');
+      
+      if (savedCenter) {
+        try {
+          const [lat, lng] = JSON.parse(savedCenter);
+          map.setView([lat, lng], savedZoom ? parseInt(savedZoom) : map.getZoom());
+        } catch (e) {
+          console.error('Failed to load saved map position:', e);
+        }
+      }
+    }
+  }, [map]);
+
+  // Save map position when it changes
+  React.useEffect(() => {
+    if (map) {
+      const savePosition = () => {
+        const center = map.getCenter();
+        const zoom = map.getZoom();
+        localStorage.setItem('map_center', JSON.stringify([center.lat, center.lng]));
+        localStorage.setItem('map_zoom', zoom.toString());
+      };
+
+      map.on('moveend', savePosition);
+      map.on('zoomend', savePosition);
+
+      return () => {
+        map.off('moveend', savePosition);
+        map.off('zoomend', savePosition);
+      };
+    }
+  }, [map]);
+
   // Zoom to nhất và khóa bản đồ khi showCenterMarker = true
   React.useEffect(() => {
     if (map && showCenterMarker) {
       // Zoom to nhất (level 18)
       map.setZoom(18);
       
-      // Disable dragging
-      map.dragging.disable();
-      
-      // Disable zoom controls
+      // Disable zoom controls (nhưng vẫn cho phép drag)
       map.touchZoom.disable();
       map.doubleClickZoom.disable();
       map.scrollWheelZoom.disable();
@@ -88,7 +123,7 @@ const CenterMarker: React.FC = () => {
   );
 };
 
-const OpenStreetMap: React.FC<OpenStreetMapProps> = ({ onMapLoad, className = '', markers = [], showCenterMarker = false }) => {
+const OpenStreetMap: React.FC<OpenStreetMapProps> = ({ onMapLoad, className = '', markers = [], showCenterMarker = false, onMarkerClick }) => {
   // Tọa độ Hồ Chí Minh
   const center: [number, number] = [10.8231, 106.6297];
   const zoom = 13;
@@ -107,7 +142,17 @@ const OpenStreetMap: React.FC<OpenStreetMapProps> = ({ onMapLoad, className = ''
         />
         {/* Dynamic markers */}
         {markers.map((m, idx) => (
-          <Marker key={`${m.lat}-${m.lng}-${idx}`} position={[m.lat, m.lng] as [number, number]}>
+          <Marker 
+            key={`${m.lat}-${m.lng}-${idx}`} 
+            position={[m.lat, m.lng] as [number, number]}
+            eventHandlers={{
+              click: () => {
+                if (onMarkerClick) {
+                  onMarkerClick(m.lat, m.lng, m.title);
+                }
+              }
+            }}
+          >
             {(m.title || m.description) && (
               <Popup>
                 <div className="text-center">
