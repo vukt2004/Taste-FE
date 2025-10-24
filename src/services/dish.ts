@@ -8,7 +8,9 @@ export async function listDishes(params?: { searchTerm?: string; categoryId?: st
   if (params?.categoryId) url.searchParams.set('categoryId', params.categoryId);
   if (params?.signatureOnly !== undefined) url.searchParams.set('signatureOnly', String(params.signatureOnly));
   const res = await fetch(url.toString());
-  return res.json();
+  const data = await res.json();
+  // Handle both array response and object with data property
+  return Array.isArray(data) ? data : (data.data || []);
 }
 
 export async function dishDetail(id: string) {

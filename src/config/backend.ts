@@ -37,7 +37,6 @@ export const API_ENDPOINTS = {
     CREATE: '/api/restaurant',
     UPDATE: (id: string) => `/api/restaurant/${id}`,
     GET: (id: string) => `/api/restaurant/${id}`,
-    CLAIM: (id: string) => `/api/restaurant/${id}/claim`,
     TOGGLE_EDIT: '/api/restaurant/toggle-edit',
     FILTER: '/api/restaurant/filter',
     SEARCH_BY_DISH_IN_BOUNDS: (dishId: string, n: number, s: number, e: number, w: number) =>

@@ -40,10 +40,12 @@ const AuthCallbackPage: React.FC = () => {
   const [message, setMessage] = useState<string>('Đang xử lý đăng nhập...');
 
   useEffect(() => {
-    const url = new URL(window.location.href);
-    const token = url.searchParams.get('token');
-
     (async () => {
+      const url = new URL(window.location.href);
+      const token = url.searchParams.get('token');
+      const refreshToken = url.searchParams.get('refreshToken');
+      const expiresAt = url.searchParams.get('expiresAt');
+      
       if (!token) {
         setMessage('Thiếu token trong callback.');
         setTimeout(() => {
@@ -54,6 +56,14 @@ const AuthCallbackPage: React.FC = () => {
 
       try {
         localStorage.setItem('auth_token', token);
+        
+        // Lưu refresh token và expiresAt nếu có
+        if (refreshToken) {
+          localStorage.setItem('refresh_token', refreshToken);
+        }
+        if (expiresAt) {
+          localStorage.setItem('token_expires_at', expiresAt);
+        }
 
         const payload = decodeJwtPayload(token);
         const userId = extractUserIdFromJwtPayload(payload);

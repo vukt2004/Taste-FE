@@ -3,9 +3,16 @@ import { listDishTypes } from '../../services/dishType';
 import { listAmenities } from '../../services/amenity';
 import { type RestaurantFilter, filterRestaurants } from '../../services/restaurant';
 
+interface CacheData {
+  amenities: Array<{ id: string; name: string; isActive: boolean }>;
+  dishes: Array<{ id: string; name: string }>;
+  dishTypes: Array<{ id: string; typeName: string }>;
+}
+
 interface ExploreTabProps {
   onFilterChange: (filter: RestaurantFilter) => void;
   mapCenter?: { lat: number; lng: number };
+  cacheData?: CacheData;
 }
 
 interface DishCategory {
@@ -42,7 +49,7 @@ const calculateBoundingBox = (lat: number, lng: number, radiusKm: number) => {
   };
 };
 
-const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter }) => {
+const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter, cacheData }) => {
   const [dishTypes, setDishTypes] = useState<DishType[]>([]);
   const [selectedDishTypeIds, setSelectedDishTypeIds] = useState<Set<string>>(new Set());
   const [selectedDishIds, setSelectedDishIds] = useState<Set<string>>(new Set());
@@ -79,6 +86,7 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter }) =>
   };
 
   useEffect(() => {
+    // Always load data from API to get full structure with dishCategories
     const loadDishTypes = async () => {
       const res = await listDishTypes();
       const data = res?.data ?? res ?? [];
@@ -88,17 +96,28 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter }) =>
       data.forEach((dt: DishType) => {
         if (dt.dishCategories) allDishes.push(...dt.dishCategories);
       });
-      setAvailableDishes(allDishes);
+      
+      // Remove duplicates by dishId
+      const uniqueDishes = allDishes.filter((dish, index, self) => 
+        index === self.findIndex(d => d.dishId === dish.dishId)
+      );
+      
+      setAvailableDishes(uniqueDishes);
     };
     loadDishTypes();
     
     const loadAmenities = async () => {
-      const res = await listAmenities({ activeOnly: true });
-      const data = res?.data ?? res ?? [];
-      setAmenities(data);
+      // Use cache if available, otherwise load from API
+      if (cacheData && cacheData.amenities.length > 0) {
+        setAmenities(cacheData.amenities);
+      } else {
+        const res = await listAmenities({ activeOnly: true });
+        const data = res?.data ?? res ?? [];
+        setAmenities(data);
+      }
     };
     loadAmenities();
-  }, []);
+  }, [cacheData]);
 
   useEffect(() => {
     const newAvailable: DishCategory[] = [];
@@ -109,12 +128,18 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter }) =>
         if (selectedDishTypeIds.has(dt.id)) newAvailable.push(...dt.dishCategories);
       });
     }
-    setAvailableDishes(newAvailable);
+    
+    // Remove duplicates by dishId
+    const uniqueDishes = newAvailable.filter((dish, index, self) => 
+      index === self.findIndex(d => d.dishId === dish.dishId)
+    );
+    
+    setAvailableDishes(uniqueDishes);
 
     setSelectedDishIds(prev => {
       const newSet = new Set<string>();
       prev.forEach(id => {
-        if (newAvailable.some(d => d.dishId === id)) newSet.add(id);
+        if (uniqueDishes.some(d => d.dishId === id)) newSet.add(id);
       });
       return newSet;
     });
@@ -147,7 +172,6 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter }) =>
           northEastLng: bbox.northEastLng,
         };
           
-          console.log('MapCenter thay đổi, cập nhật filter với bounding box mới:', bbox);
           onFilterChange(filter);
         }, 500); // Debounce 500ms
         
@@ -159,12 +183,10 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter }) =>
     if (mapCenter) {
       prevMapCenterRef.current = mapCenter;
     }
-  }, [mapCenter, selectedDishIds, selectedAmenityIds, searchResult, onFilterChange]);
+  }, [mapCenter, selectedDishIds, selectedAmenityIds, searchResult, searchKeyword, priceRange, onFilterChange]);
 
 
   const handleSearch = async () => {
-    console.log('MapCenter:', mapCenter);
-    
     const filter: RestaurantFilter = {
       verifiedOnly: true,
       activeOnly: true,
@@ -178,7 +200,6 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter }) =>
     // Thêm thông tin vùng địa lý nếu có mapCenter
     if (mapCenter) {
       const bbox = calculateBoundingBox(mapCenter.lat, mapCenter.lng, RADIUS_KM);
-      console.log('Bounding box:', bbox);
       filter.southWestLat = bbox.southWestLat;
       filter.southWestLng = bbox.southWestLng;
       filter.northEastLat = bbox.northEastLat;
@@ -187,14 +208,11 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter }) =>
       // Nếu không có mapCenter, sử dụng tọa độ mặc định (Hồ Chí Minh)
       const defaultCenter = { lat: 10.8231, lng: 106.6297 };
       const bbox = calculateBoundingBox(defaultCenter.lat, defaultCenter.lng, RADIUS_KM);
-      console.log('Sử dụng default center, bounding box:', bbox);
       filter.southWestLat = bbox.southWestLat;
       filter.southWestLng = bbox.southWestLng;
       filter.northEastLat = bbox.northEastLat;
       filter.northEastLng = bbox.northEastLng;
     }
-    
-    console.log('Filter đang gửi:', JSON.stringify(filter, null, 2));
     
     setIsSearching(true);
     try {
@@ -220,13 +238,6 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter }) =>
       return s;
     });
   };
-
-  const sectionHeader = (title: string, actions?: React.ReactNode) => (
-    <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200 rounded-t-md">
-      <h3 className="text-[11px] font-bold text-gray-600 uppercase tracking-wide">{title}</h3>
-      {actions && <div className="flex items-center gap-1">{actions}</div>}
-    </div>
-  );
 
   const collapsibleSection = (
     title: string,
@@ -325,17 +336,18 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter }) =>
             />
           </div>
           <div className="grid grid-cols-2 gap-1 px-2 pb-2 max-h-60 overflow-y-auto">
-            {dishTypes
-              .filter(dt => !categorySearch || dt.typeName.toLowerCase().includes(categorySearch.toLowerCase()))
-              .map(dt => (
+            {(() => {
+              const filteredDishTypes = dishTypes.filter(dt => !categorySearch || dt.typeName.toLowerCase().includes(categorySearch.toLowerCase()));
+              return filteredDishTypes.map((dt, index) => (
                 <div
-                  key={dt.id}
+                  key={`${dt.id}-${index}`}
                   className={itemStyle(selectedDishTypeIds.has(dt.id))}
                   onClick={() => handleToggleSet(setSelectedDishTypeIds, dt.id)}
                 >
                   {dt.typeName}
                 </div>
-              ))}
+              ));
+            })()}
           </div>
         </>,
         <button onClick={() => setSelectedDishTypeIds(new Set())} className="text-[11px] text-gray-500 hover:text-blue-500 transition-colors">
@@ -361,17 +373,18 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter }) =>
             {availableDishes.length === 0 ? (
               <div className="col-span-2 text-center text-gray-400 text-sm py-6">Không có món ăn</div>
             ) : (
-              availableDishes
-                .filter(d => !dishSearchTerm || d.dishName.toLowerCase().includes(dishSearchTerm.toLowerCase()))
-                .map(d => (
+              (() => {
+                const filteredDishes = availableDishes.filter(d => !dishSearchTerm || d.dishName.toLowerCase().includes(dishSearchTerm.toLowerCase()));
+                return filteredDishes.map((d, index) => (
                   <div
-                    key={d.dishId}
+                    key={`${d.dishId}-${index}`}
                     className={itemStyle(selectedDishIds.has(d.dishId))}
                     onClick={() => handleToggleSet(setSelectedDishIds, d.dishId)}
                   >
                     {d.dishName}
                   </div>
-                ))
+                ));
+              })()
             )}
           </div>
         </>,
@@ -408,9 +421,9 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter }) =>
           <div className="grid grid-cols-2 gap-1 px-2 pb-2 max-h-60 overflow-y-auto">
             {amenities
               .filter(a => !amenitySearch || a.name.toLowerCase().includes(amenitySearch.toLowerCase()))
-              .map(a => (
+              .map((a, index) => (
                 <div
-                  key={a.id}
+                  key={`${a.id}-${index}`}
                   className={itemStyle(selectedAmenityIds.has(a.id))}
                   onClick={() => handleToggleSet(setSelectedAmenityIds, a.id)}
                 >

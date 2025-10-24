@@ -14,7 +14,7 @@ L.Icon.Default.mergeOptions({
 interface OpenStreetMapProps {
   onMapLoad?: (map: L.Map) => void;
   className?: string;
-  markers?: { lat: number; lng: number; title?: string; description?: string }[];
+  markers?: { lat: number; lng: number; title?: string; description?: string; type?: 'normal' | 'favourite' | 'blacklist' }[];
   showCenterMarker?: boolean;
   onMarkerClick?: (lat: number, lng: number, title?: string) => void;
 }
@@ -141,28 +141,43 @@ const OpenStreetMap: React.FC<OpenStreetMapProps> = ({ onMapLoad, className = ''
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         {/* Dynamic markers */}
-        {markers.map((m, idx) => (
-          <Marker 
-            key={`${m.lat}-${m.lng}-${idx}`} 
-            position={[m.lat, m.lng] as [number, number]}
-            eventHandlers={{
-              click: () => {
-                if (onMarkerClick) {
-                  onMarkerClick(m.lat, m.lng, m.title);
+        {markers.map((m, idx) => {
+          // Create custom icon based on type
+          let iconColor = '#EF4444'; // red for normal
+          if (m.type === 'favourite') iconColor = '#FBBF24'; // yellow
+          if (m.type === 'blacklist') iconColor = '#000000'; // black
+          
+          const customIcon = L.divIcon({
+            className: 'custom-marker',
+            html: `<div style="background-color: ${iconColor}; width: 30px; height: 30px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>`,
+            iconSize: [30, 30],
+            iconAnchor: [15, 30],
+          });
+          
+          return (
+            <Marker 
+              key={`${m.lat}-${m.lng}-${idx}`} 
+              position={[m.lat, m.lng] as [number, number]}
+              icon={customIcon}
+              eventHandlers={{
+                click: () => {
+                  if (onMarkerClick) {
+                    onMarkerClick(m.lat, m.lng, m.title);
+                  }
                 }
-              }
-            }}
-          >
-            {(m.title || m.description) && (
-              <Popup>
-                <div className="text-center">
-                  {m.title && <h3 className="font-bold text-lg">{m.title}</h3>}
-                  {m.description && <p className="text-sm text-gray-600">{m.description}</p>}
-                </div>
-              </Popup>
-            )}
-          </Marker>
-        ))}
+              }}
+            >
+              {(m.title || m.description) && (
+                <Popup>
+                  <div className="text-center">
+                    {m.title && <h3 className="font-bold text-lg">{m.title}</h3>}
+                    {m.description && <p className="text-sm text-gray-600">{m.description}</p>}
+                  </div>
+                </Popup>
+              )}
+            </Marker>
+          );
+        })}
       </MapContainer>
       {showCenterMarker && <CenterMarker />}
     </div>

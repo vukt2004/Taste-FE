@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { listDishTypes, createDishType } from '../services/dishType';
-import { createDish, addDishCategories, removeDishCategories } from '../services/dish';
-import { DishContributionService } from '../services/userService';
+import { listDishTypes, createDishType } from '../../services/dishType';
+import { createDish, addDishCategories, removeDishCategories } from '../../services/dish';
+import { DishContributionService } from '../../services/userService';
 
 type DishTypeItem = {
   id?: string;

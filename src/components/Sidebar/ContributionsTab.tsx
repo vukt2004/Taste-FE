@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BACKEND_URL, API_ENDPOINTS } from '../../config/backend';
 import { listDishes } from '../../services/dish';
 import { listAmenities } from '../../services/amenity';
 import { listDishTypes } from '../../services/dishType';
 import { UserService } from '../../services/userService';
+import { createRestaurantOwnershipRequest } from '../../services/restaurantOwnership';
+import { uploadReviewImages } from '../../services/review';
 
 type ContributionType = 'dish' | 'restaurant';
 
@@ -25,9 +27,12 @@ interface DishType {
 interface ContributionsTabProps {
   mapCenter?: { lat: number; lng: number };
   onShowCenterMarkerChange?: (show: boolean) => void;
+  selectedRestaurantForClaim?: { id: string; name: string } | null;
+  onRestaurantSelectedForClaim?: (restaurant: { id: string; name: string } | null) => void;
+  onClaimModeChange?: (isClaimMode: boolean) => void;
 }
 
-const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCenterMarkerChange }) => {
+const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCenterMarkerChange, selectedRestaurantForClaim: propSelectedRestaurant, onRestaurantSelectedForClaim, onClaimModeChange }) => {
   const [showModal, setShowModal] = useState(false);
   const [contributionType, setContributionType] = useState<ContributionType | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -54,6 +59,21 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
   const [selectedDishIds, setSelectedDishIds] = useState<string[]>([]);
   const [amenitySearchTerm, setAmenitySearchTerm] = useState('');
   const [dishSearchTerm, setDishSearchTerm] = useState('');
+  
+  // Claim form states
+  const [showClaimModal, setShowClaimModal] = useState(false);
+  
+  // Notify parent when claim mode changes
+  useEffect(() => {
+    onClaimModeChange?.(showClaimModal);
+  }, [showClaimModal, onClaimModeChange]);
+  const selectedRestaurantForClaim = propSelectedRestaurant;
+  const [claimBusinessRelationship, setClaimBusinessRelationship] = useState('');
+  const [claimAdditionalInfo, setClaimAdditionalInfo] = useState('');
+  const [claimProofImages, setClaimProofImages] = useState<File[]>([]);
+  const [claimImagePreviews, setClaimImagePreviews] = useState<string[]>([]);
+  const [isSubmittingClaim, setIsSubmittingClaim] = useState(false);
+  const claimFileInputRef = useRef<HTMLInputElement>(null);
 
   const openModal = (type: ContributionType) => {
     setContributionType(type);
@@ -257,11 +277,76 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
 
   const timeSlots = generateTimeSlots();
 
+  const handleClaimImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      setClaimProofImages(files);
+      const newPreviews: string[] = [];
+      files.forEach(file => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          newPreviews.push(reader.result as string);
+          if (newPreviews.length === files.length) {
+            setClaimImagePreviews(newPreviews);
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  const handleRemoveClaimImage = (index: number) => {
+    setClaimProofImages(prev => prev.filter((_, i) => i !== index));
+    setClaimImagePreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSubmitClaim = async () => {
+    if (!selectedRestaurantForClaim || isSubmittingClaim) return;
+    
+    if (!claimBusinessRelationship.trim()) {
+      alert('Vui lòng điền mối quan hệ kinh doanh');
+      return;
+    }
+    
+    setIsSubmittingClaim(true);
+    try {
+      // Upload proof images if any
+      let proofImageUrls: string[] = [];
+      if (claimProofImages.length > 0) {
+        const urls = await uploadReviewImages(claimProofImages);
+        proofImageUrls = urls;
+      }
+      
+      await createRestaurantOwnershipRequest({
+        restaurantId: selectedRestaurantForClaim.id,
+        businessRelationship: claimBusinessRelationship,
+        additionalInfo: claimAdditionalInfo || undefined,
+        proofImages: proofImageUrls.length > 0 ? JSON.stringify(proofImageUrls) : undefined
+      });
+      
+      // Reset form
+      setShowClaimModal(false);
+      onRestaurantSelectedForClaim?.(null);
+      setClaimBusinessRelationship('');
+      setClaimAdditionalInfo('');
+      setClaimProofImages([]);
+      setClaimImagePreviews([]);
+      
+      alert('Yêu cầu claim quán ăn đã được gửi thành công! Đang chờ admin xét duyệt.');
+    } catch (error) {
+      console.error('Error submitting claim:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Có lỗi xảy ra khi gửi yêu cầu claim. Vui lòng thử lại.';
+      alert(errorMessage);
+    } finally {
+      setIsSubmittingClaim(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-semibold text-gray-700">Đóng góp</h3>
       
-      {!showModal ? (
+      {!showModal && !showClaimModal ? (
         <div className="space-y-2">
           <button
             onClick={() => openModal('dish')}
@@ -292,6 +377,135 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
               </div>
             </div>
           </button>
+
+          <button
+            onClick={() => setShowClaimModal(true)}
+            className="w-full p-4 bg-white rounded-lg border border-gray-200 hover:border-yellow-400 hover:bg-yellow-50 transition-colors text-left"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
+                <span className="text-yellow-600 text-lg">👑</span>
+              </div>
+              <div>
+                <div className="font-medium text-gray-800">Claim quán ăn</div>
+                <div className="text-xs text-gray-500">Yêu cầu làm chủ quán ăn</div>
+              </div>
+            </div>
+          </button>
+        </div>
+      ) : showClaimModal ? (
+        <div className="bg-white rounded-lg shadow-lg">
+          {/* Claim Modal Header */}
+          <div className="flex items-center justify-between p-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-800">Claim quán ăn</h2>
+            <button
+              onClick={() => {
+                setShowClaimModal(false);
+                onRestaurantSelectedForClaim?.(null);
+                setClaimBusinessRelationship('');
+                setClaimAdditionalInfo('');
+                setClaimProofImages([]);
+                setClaimImagePreviews([]);
+              }}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Claim Modal Body */}
+          <div className="p-4 max-h-[60vh] overflow-y-auto space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Chọn marker trên bản đồ để claim quán ăn
+              </label>
+              <div className="text-xs text-gray-500 bg-yellow-50 p-3 rounded-lg">
+                {selectedRestaurantForClaim 
+                  ? `Đã chọn: ${selectedRestaurantForClaim.name}`
+                  : 'Hãy click vào một marker trên bản đồ để chọn quán ăn vô chủ'}
+              </div>
+            </div>
+
+            {selectedRestaurantForClaim && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Mối quan hệ kinh doanh <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={claimBusinessRelationship}
+                    onChange={(e) => setClaimBusinessRelationship(e.target.value)}
+                    placeholder="Ví dụ: Tôi là chủ sở hữu của quán ăn này"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    rows={3}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Thông tin bổ sung
+                  </label>
+                  <textarea
+                    value={claimAdditionalInfo}
+                    onChange={(e) => setClaimAdditionalInfo(e.target.value)}
+                    placeholder="Ví dụ: Có giấy phép kinh doanh và hợp đồng thuê mặt bằng"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    rows={3}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Hình ảnh chứng minh
+                  </label>
+                  <input
+                    ref={claimFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleClaimImageSelect}
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => claimFileInputRef.current?.click()}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
+                  >
+                    Chọn ảnh
+                  </button>
+                  
+                  {claimImagePreviews.length > 0 && (
+                    <div className="mt-2 grid grid-cols-3 gap-2">
+                      {claimImagePreviews.map((preview, index) => (
+                        <div key={index} className="relative">
+                          <img
+                            src={preview}
+                            alt={`Proof ${index + 1}`}
+                            className="w-full h-24 object-cover rounded-lg border border-gray-300"
+                          />
+                          <button
+                            onClick={() => handleRemoveClaimImage(index)}
+                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={handleSubmitClaim}
+                  disabled={isSubmittingClaim}
+                  className={`w-full py-2 px-4 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors ${
+                    isSubmittingClaim ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                >
+                  {isSubmittingClaim ? 'Đang gửi...' : 'Gửi yêu cầu claim'}
+                </button>
+              </>
+            )}
+          </div>
         </div>
       ) : (
         <div className="bg-white rounded-lg shadow-lg">

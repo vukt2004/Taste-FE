@@ -32,7 +32,10 @@ export async function filterRestaurants(filter: RestaurantFilter) {
 }
 
 export async function getRestaurantById(id: string) {
-  const res = await fetch(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANTS.GET(id)}`);
+  const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANTS.GET(id)}`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
   return res.json();
 }
 
@@ -48,18 +51,15 @@ export async function createRestaurant(formData: FormData) {
 export async function updateRestaurant(id: string, formData: FormData) {
   const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANTS.UPDATE(id)}`, {
     method: 'PUT',
-    headers: getAuthHeaders(),
     body: formData,
   });
   return res.json();
 }
 
-export async function claimRestaurant(id: string) {
-  const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANTS.CLAIM(id)}`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-  });
-  return res.json();
+// DEPRECATED: Use createRestaurantOwnershipRequest instead
+export async function claimRestaurant() {
+  console.warn('claimRestaurant is deprecated. Use createRestaurantOwnershipRequest instead.');
+  throw new Error('This endpoint has been removed. Please use /api/RestaurantOwnership/request to claim a restaurant.');
 }
 
 export async function toggleRestaurantEdit(restaurantId: string, canEdit: boolean, reason?: string) {

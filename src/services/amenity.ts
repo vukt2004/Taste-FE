@@ -13,6 +13,7 @@ export async function listAmenities(params?: { activeOnly?: boolean }) {
   }
   const res = await fetch(url.toString());
   const data = await res.json();
-  return data;
+  // Handle both array response and object with data property
+  return Array.isArray(data) ? data : (data.data || []);
 }
 

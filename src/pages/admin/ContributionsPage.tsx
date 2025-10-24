@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BACKEND_URL, API_ENDPOINTS } from '../config/backend';
-import { UserService } from '../services/userService';
+import { BACKEND_URL, API_ENDPOINTS } from '../../config/backend';
+import { UserService } from '../../services/userService';
 
 interface DishContribution {
   id: string;
@@ -50,6 +50,7 @@ const AdminContributionsPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [amenities, setAmenities] = useState<Array<{ id: string; name: string }>>([]);
   const [dishes, setDishes] = useState<Array<{ id: string; name: string }>>([]);
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   useEffect(() => {
     // Check if user is admin
@@ -67,10 +68,13 @@ const AdminContributionsPage: React.FC = () => {
   }, [navigate]);
 
   useEffect(() => {
-    loadContributions();
-    loadAmenities();
-    loadDishes();
-  }, []);
+    if (!hasLoaded) {
+      loadContributions();
+      loadAmenities();
+      loadDishes();
+      setHasLoaded(true);
+    }
+  }, [hasLoaded]);
 
   const loadAmenities = async () => {
     try {
@@ -102,14 +106,10 @@ const AdminContributionsPage: React.FC = () => {
 
   const loadContributions = async () => {
     try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) return;
-
       // Load dish contributions
-      const dishResponse = await fetch(`${BACKEND_URL}${API_ENDPOINTS.DISH_CONTRIBUTION.LIST}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+      const dishResponse = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.DISH_CONTRIBUTION.LIST}`, {
+        method: 'GET',
+        headers: UserService.getAuthHeaders(),
       });
 
       console.log('Dish contributions response:', dishResponse.status, dishResponse.statusText);
@@ -125,10 +125,9 @@ const AdminContributionsPage: React.FC = () => {
       }
 
       // Load restaurant contributions
-      const restaurantResponse = await fetch(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANT_CONTRIBUTION.LIST}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+      const restaurantResponse = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANT_CONTRIBUTION.LIST}`, {
+        method: 'GET',
+        headers: UserService.getAuthHeaders(),
       });
 
       console.log('Restaurant contributions response:', restaurantResponse.status, restaurantResponse.statusText);
@@ -152,16 +151,15 @@ const AdminContributionsPage: React.FC = () => {
     
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('auth_token');
       const endpoint = contributionType === 'dish' 
         ? `/api/admin/dish-contribution/${selectedContribution.id}/approve`
         : `/api/admin/restaurant-contribution/${selectedContribution.id}/approve`;
       
-      const response = await fetch(`${BACKEND_URL}${endpoint}`, {
+      const response = await UserService.fetchWithAuth(`${BACKEND_URL}${endpoint}`, {
         method: 'POST',
         headers: {
+          ...UserService.getAuthHeaders(),
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           adminNotes: adminNotes || undefined,
@@ -188,16 +186,15 @@ const AdminContributionsPage: React.FC = () => {
     
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('auth_token');
       const endpoint = contributionType === 'dish' 
         ? `/api/admin/dish-contribution/${selectedContribution.id}/reject`
         : `/api/admin/restaurant-contribution/${selectedContribution.id}/reject`;
       
-      const response = await fetch(`${BACKEND_URL}${endpoint}`, {
+      const response = await UserService.fetchWithAuth(`${BACKEND_URL}${endpoint}`, {
         method: 'POST',
         headers: {
+          ...UserService.getAuthHeaders(),
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           adminNotes: adminNotes || undefined,

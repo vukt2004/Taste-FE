@@ -24,6 +24,7 @@ export interface Restaurant {
   priceRange: string;
   operatingHours: string;
   amenities: string;
+  story?: string;
   verificationStatus: string;
   isActive: boolean;
   isVerified: boolean;

@@ -1,16 +1,29 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { type User, type UserProfile, getMyProfile } from '../../services/user';
 import AuthForm from '../AuthForm';
+import RestaurantEditModal from '../RestaurantEditModal';
 
 interface UserTabProps {
   user: User | null;
   onUserChange?: (user: User | null) => void;
   onNavigateToRestaurant?: (restaurantId: string, lat: number, lng: number) => void;
+  onFavouriteRestaurantsChange?: (restaurants: Restaurant[]) => void;
+  onBlacklistedRestaurantsChange?: (restaurants: Restaurant[]) => void;
+  onShowFavouritesChange?: (show: boolean) => void;
+  onShowBlacklistChange?: (show: boolean) => void;
 }
 
-const UserTab: React.FC<UserTabProps> = ({ user, onUserChange, onNavigateToRestaurant }) => {
+interface Restaurant {
+  id: string;
+  restaurantName: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+const UserTab: React.FC<UserTabProps> = ({ user, onUserChange, onNavigateToRestaurant, onFavouriteRestaurantsChange, onBlacklistedRestaurantsChange, onShowFavouritesChange, onShowBlacklistChange }) => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedRestaurantForEdit, setSelectedRestaurantForEdit] = useState<Restaurant | null>(null);
   const [expandedSections, setExpandedSections] = useState<{
     favourites: boolean;
     blacklist: boolean;
@@ -19,6 +32,14 @@ const UserTab: React.FC<UserTabProps> = ({ user, onUserChange, onNavigateToResta
     favourites: false,
     blacklist: false,
     owned: false,
+  });
+  
+  const [showMarkers, setShowMarkers] = useState<{
+    favourites: boolean;
+    blacklist: boolean;
+  }>({
+    favourites: true,
+    blacklist: true,
   });
 
   const toggleSection = (section: 'favourites' | 'blacklist' | 'owned') => {
@@ -33,12 +54,18 @@ const UserTab: React.FC<UserTabProps> = ({ user, onUserChange, onNavigateToResta
     try {
       const userProfile = await getMyProfile();
       setProfile(userProfile);
+      
+      // Notify parent about favourite and blacklisted restaurants
+      if (userProfile) {
+        onFavouriteRestaurantsChange?.(userProfile.favouriteRestaurants || []);
+        onBlacklistedRestaurantsChange?.(userProfile.blacklistedRestaurants || []);
+      }
     } catch {
       // Silently handle profile loading error
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [onFavouriteRestaurantsChange, onBlacklistedRestaurantsChange]);
 
   useEffect(() => {
     if (user) {
@@ -70,7 +97,7 @@ const UserTab: React.FC<UserTabProps> = ({ user, onUserChange, onNavigateToResta
             </div>
           </div>
           <div className="text-xs text-gray-500 flex justify-between">
-            <span>Điểm: {user.points}</span>
+            <span>Điểm: {profile?.points ?? user.points}</span>
             <span>Loại: {user.userType}</span>
           </div>
         </div>
@@ -81,17 +108,30 @@ const UserTab: React.FC<UserTabProps> = ({ user, onUserChange, onNavigateToResta
             <div className="space-y-3">
               {/* Nhà hàng yêu thích */}
               <div className="bg-white rounded-lg border border-gray-200 p-3">
-                <button
-                  onClick={() => toggleSection('favourites')}
-                  className="w-full flex items-center justify-between text-left"
-                >
-                  <h4 className="text-sm font-semibold text-gray-700">
-                    Yêu thích ({profile.favouriteRestaurants?.length || 0})
-                  </h4>
-                  <span className="text-xs text-gray-500">
-                    {expandedSections.favourites ? '▼' : '▶'}
-                  </span>
-                </button>
+                <div className="flex items-center justify-between mb-2">
+                  <button
+                    onClick={() => toggleSection('favourites')}
+                    className="flex items-center justify-between text-left flex-1"
+                  >
+                    <h4 className="text-sm font-semibold text-gray-700">
+                      Yêu thích ({profile.favouriteRestaurants?.length || 0})
+                    </h4>
+                    <span className="text-xs text-gray-500 ml-2">
+                      {expandedSections.favourites ? '▼' : '▶'}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      const newValue = !showMarkers.favourites;
+                      setShowMarkers(prev => ({ ...prev, favourites: newValue }));
+                      onShowFavouritesChange?.(newValue);
+                    }}
+                    className="ml-2 px-2 py-1 text-xs bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"
+                    title="Ẩn/hiện markers yêu thích"
+                  >
+                    {showMarkers.favourites ? 'Ẩn' : 'Hiện'}
+                  </button>
+                </div>
                 {expandedSections.favourites && (
                   <div className="space-y-1 max-h-40 overflow-y-auto mt-2">
                     {profile.favouriteRestaurants && profile.favouriteRestaurants.length > 0 ? (
@@ -121,17 +161,30 @@ const UserTab: React.FC<UserTabProps> = ({ user, onUserChange, onNavigateToResta
 
               {/* Nhà hàng blacklist */}
               <div className="bg-white rounded-lg border border-gray-200 p-3">
-                <button
-                  onClick={() => toggleSection('blacklist')}
-                  className="w-full flex items-center justify-between text-left"
-                >
-                  <h4 className="text-sm font-semibold text-gray-700">
-                    Đã chặn ({profile.blacklistedRestaurants?.length || 0})
-                  </h4>
-                  <span className="text-xs text-gray-500">
-                    {expandedSections.blacklist ? '▼' : '▶'}
-                  </span>
-                </button>
+                <div className="flex items-center justify-between mb-2">
+                  <button
+                    onClick={() => toggleSection('blacklist')}
+                    className="flex items-center justify-between text-left flex-1"
+                  >
+                    <h4 className="text-sm font-semibold text-gray-700">
+                      Đã chặn ({profile.blacklistedRestaurants?.length || 0})
+                    </h4>
+                    <span className="text-xs text-gray-500 ml-2">
+                      {expandedSections.blacklist ? '▼' : '▶'}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      const newValue = !showMarkers.blacklist;
+                      setShowMarkers(prev => ({ ...prev, blacklist: newValue }));
+                      onShowBlacklistChange?.(newValue);
+                    }}
+                    className="ml-2 px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                    title="Ẩn/hiện markers blacklist"
+                  >
+                    {showMarkers.blacklist ? 'Ẩn' : 'Hiện'}
+                  </button>
+                </div>
                 {expandedSections.blacklist && (
                   <div className="space-y-1 max-h-40 overflow-y-auto mt-2">
                     {profile.blacklistedRestaurants && profile.blacklistedRestaurants.length > 0 ? (
@@ -179,18 +232,29 @@ const UserTab: React.FC<UserTabProps> = ({ user, onUserChange, onNavigateToResta
                         profile.ownedRestaurants.map((restaurant) => (
                           <div key={restaurant.id} className="flex items-center justify-between py-1 border-b border-gray-100 last:border-0">
                             <span className="text-xs text-gray-600 flex-1">{restaurant.restaurantName}</span>
-                            {restaurant.latitude && restaurant.longitude && (
+                            <div className="flex gap-1">
                               <button
-                                onClick={() => onNavigateToRestaurant?.(restaurant.id, restaurant.latitude!, restaurant.longitude!)}
-                                className="ml-2 p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
-                                title="Định vị trên bản đồ"
+                                onClick={() => setSelectedRestaurantForEdit(restaurant)}
+                                className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded transition-colors"
+                                title="Chỉnh sửa"
                               >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                 </svg>
                               </button>
-                            )}
+                              {restaurant.latitude && restaurant.longitude && (
+                                <button
+                                  onClick={() => onNavigateToRestaurant?.(restaurant.id, restaurant.latitude!, restaurant.longitude!)}
+                                  className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
+                                  title="Định vị trên bản đồ"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
                           </div>
                         ))
                       ) : (
@@ -207,6 +271,18 @@ const UserTab: React.FC<UserTabProps> = ({ user, onUserChange, onNavigateToResta
         <div className="flex justify-center">
           <AuthForm onLoginSuccess={handleLoginSuccess} onLogout={handleLogout} />
         </div>
+      )}
+      
+      {/* Restaurant Edit Modal */}
+      {selectedRestaurantForEdit && (
+        <RestaurantEditModal
+          restaurant={selectedRestaurantForEdit}
+          onClose={() => setSelectedRestaurantForEdit(null)}
+          onUpdate={() => {
+            loadProfile();
+            setSelectedRestaurantForEdit(null);
+          }}
+        />
       )}
     </div>
   );

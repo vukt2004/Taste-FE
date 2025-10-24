@@ -15,6 +15,19 @@ interface Restaurant {
   longitude?: number;
 }
 
+interface RestaurantForMarker {
+  id: string;
+  restaurantName: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+interface CacheData {
+  amenities: Array<{ id: string; name: string; isActive: boolean }>;
+  dishes: Array<{ id: string; name: string }>;
+  dishTypes: Array<{ id: string; typeName: string }>;
+}
+
 interface SidebarProps {
   user: User | null;
   isOpen: boolean;
@@ -25,21 +38,43 @@ interface SidebarProps {
   onNavigateToRestaurant?: (restaurantId: string, lat: number, lng: number) => void;
   onShowCenterMarkerChange?: (show: boolean) => void;
   selectedRestaurant?: Restaurant | null;
+  lastFilterKeywords?: {
+    dishIds?: string[];
+    amenityIds?: string[];
+  };
+  selectedRestaurantForClaim?: { id: string; name: string } | null;
+  onRestaurantSelectedForClaim?: (restaurant: { id: string; name: string } | null) => void;
+  onFavouriteRestaurantsChange?: (restaurants: RestaurantForMarker[]) => void;
+  onBlacklistedRestaurantsChange?: (restaurants: RestaurantForMarker[]) => void;
+  onShowFavouritesChange?: (show: boolean) => void;
+  onShowBlacklistChange?: (show: boolean) => void;
+  cacheData?: CacheData;
+  onClaimModeChange?: (isClaimMode: boolean) => void;
+  onRestaurantRefresh?: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ user, isOpen, onToggle, onFilterChange, mapCenter, onUserChange, onNavigateToRestaurant, onShowCenterMarkerChange, selectedRestaurant }) => {
+const Sidebar: React.FC<SidebarProps> = ({ user, isOpen, onToggle, onFilterChange, mapCenter, onUserChange, onNavigateToRestaurant, onShowCenterMarkerChange, selectedRestaurant, lastFilterKeywords, selectedRestaurantForClaim, onRestaurantSelectedForClaim, onFavouriteRestaurantsChange, onBlacklistedRestaurantsChange, onShowFavouritesChange, onShowBlacklistChange, cacheData, onClaimModeChange, onRestaurantRefresh }) => {
   const [activeTab, setActiveTab] = useState<'explore' | 'comments' | 'contributions' | 'user'>('explore');
 
   const handleFilterChange = (filter: RestaurantFilter) => {
     if (onFilterChange) onFilterChange(filter);
   };
 
-  // Auto switch to comments tab when restaurant is selected
+  // Track claim mode state
+  const [isClaimMode, setIsClaimMode] = useState(false);
+  
+  // Handle claim mode change from ContributionsTab
+  const handleClaimModeChange = (isClaimMode: boolean) => {
+    setIsClaimMode(isClaimMode);
+    onClaimModeChange?.(isClaimMode);
+  };
+  
+  // Auto switch to comments tab when restaurant is selected (unless in claim mode)
   React.useEffect(() => {
-    if (selectedRestaurant) {
+    if (selectedRestaurant && !isClaimMode) {
       setActiveTab('comments');
     }
-  }, [selectedRestaurant]);
+  }, [selectedRestaurant, isClaimMode]);
 
   // Hide center marker when switching away from contributions tab
   React.useEffect(() => {
@@ -78,10 +113,10 @@ const Sidebar: React.FC<SidebarProps> = ({ user, isOpen, onToggle, onFilterChang
         className={`flex-1 overflow-y-auto p-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent 
         ${isOpen ? 'opacity-100 visible' : 'opacity-0 invisible'} transition-opacity duration-300`}
       >
-        {activeTab === 'explore' && <ExploreTab onFilterChange={handleFilterChange} mapCenter={mapCenter} />}
-        {activeTab === 'comments' && <CommentsTab restaurant={selectedRestaurant} />}
-        {activeTab === 'contributions' && <ContributionsTab mapCenter={mapCenter} onShowCenterMarkerChange={onShowCenterMarkerChange} />}
-        {activeTab === 'user' && <UserTab user={user} onUserChange={onUserChange} onNavigateToRestaurant={onNavigateToRestaurant} />}
+        {activeTab === 'explore' && <ExploreTab onFilterChange={handleFilterChange} mapCenter={mapCenter} cacheData={cacheData} />}
+        {activeTab === 'comments' && <CommentsTab restaurant={selectedRestaurant} lastFilterKeywords={lastFilterKeywords} onRestaurantRefresh={onRestaurantRefresh} />}
+        {activeTab === 'contributions' && <ContributionsTab mapCenter={mapCenter} onShowCenterMarkerChange={onShowCenterMarkerChange} selectedRestaurantForClaim={selectedRestaurantForClaim} onRestaurantSelectedForClaim={onRestaurantSelectedForClaim} onClaimModeChange={handleClaimModeChange} />}
+        {activeTab === 'user' && <UserTab user={user} onUserChange={onUserChange} onNavigateToRestaurant={onNavigateToRestaurant} onFavouriteRestaurantsChange={onFavouriteRestaurantsChange} onBlacklistedRestaurantsChange={onBlacklistedRestaurantsChange} onShowFavouritesChange={onShowFavouritesChange} onShowBlacklistChange={onShowBlacklistChange} />}
       </div>
 
       {/* Footer */}
