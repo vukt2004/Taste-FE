@@ -190,25 +190,25 @@ const ReviewItem: React.FC<ReviewItemProps> = ({ review }) => {
       </div>
 
       {/* Like/Dislike and Score */}
-      <div className="flex items-center gap-2 mt-2">
+      <div className="flex items-center gap-1.5 sm:gap-2 mt-2">
         <button
           onClick={handleLike}
           disabled={isLoading}
-          className={`px-3 py-1 rounded text-xs transition-colors flex items-center gap-1 ${
+          className={`px-2 sm:px-3 py-0.5 sm:py-1 rounded text-xs transition-colors flex items-center gap-0.5 sm:gap-1 ${
             isLiked ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
-          <span>👍</span>
+          <span className="text-xs sm:text-sm">👍</span>
           <span>Like</span>
         </button>
         <button
           onClick={handleDislike}
           disabled={isLoading}
-          className={`px-3 py-1 rounded text-xs transition-colors flex items-center gap-1 ${
+          className={`px-2 sm:px-3 py-0.5 sm:py-1 rounded text-xs transition-colors flex items-center gap-0.5 sm:gap-1 ${
             isDisliked ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
-          <span>👎</span>
+          <span className="text-xs sm:text-sm">👎</span>
           <span>Dislike</span>
         </button>
         <span className="text-xs text-gray-500 ml-auto">
@@ -582,14 +582,14 @@ const CommentsTab: React.FC<CommentsTabProps> = ({ restaurant, lastFilterKeyword
               
               {/* Rating selection */}
               <div className="mb-3">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Đánh giá (1-5 sao)</label>
-                <div className="flex gap-2">
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Đánh giá (1-5 sao)</label>
+                <div className="flex gap-1 sm:gap-2">
                   {[1, 2, 3, 4, 5].map((rating) => (
                     <button
                       key={rating}
                       type="button"
                       onClick={() => setReviewRating(rating)}
-                      className={`px-3 py-1 rounded border ${
+                      className={`px-2 sm:px-3 py-0.5 sm:py-1 rounded border text-xs sm:text-sm ${
                         reviewRating === rating
                           ? 'bg-blue-500 text-white border-blue-500'
                           : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
@@ -654,7 +654,7 @@ const CommentsTab: React.FC<CommentsTabProps> = ({ restaurant, lastFilterKeyword
                 <button
                   onClick={handleSubmitReview}
                   disabled={isSubmittingReview}
-                  className={`px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 ${
+                  className={`px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-500 text-white text-xs sm:text-sm rounded-lg hover:bg-blue-600 ${
                     isSubmittingReview ? 'opacity-50 cursor-not-allowed' : ''
                   }`}
                 >

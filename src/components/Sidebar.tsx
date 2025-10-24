@@ -87,15 +87,15 @@ const Sidebar: React.FC<SidebarProps> = ({ user, isOpen, onToggle, onFilterChang
     <div
       className={`h-full flex flex-col fixed left-0 top-0 z-30 transition-all duration-300 ease-in-out
       backdrop-blur-md border-r
-      ${isOpen ? 'w-[28vw] border-gray-200 bg-white/90 shadow-lg' : 'w-12 bg-white/40 border-transparent'}`}
+      ${isOpen ? 'w-[90vw] sm:w-[80vw] md:w-[50vw] lg:w-[40vw] xl:w-[28vw] border-gray-200 bg-white/90 shadow-lg' : 'w-12 bg-white/40 border-transparent'}`}
     >
       {/* Toggle button */}
         <button
           onClick={onToggle}
         className="absolute left-full top-1/2 -translate-y-1/2 translate-x-1/2 
-        w-9 h-9 flex items-center justify-center rounded-full 
+        w-7 h-7 sm:w-9 sm:h-9 flex items-center justify-center rounded-full 
         border border-gray-300 bg-white text-gray-700 shadow-md 
-        hover:bg-blue-50 hover:border-blue-400 hover:text-blue-600 transition-all z-40"
+        hover:bg-blue-50 hover:border-blue-400 hover:text-blue-600 transition-all z-40 text-sm sm:text-base"
           title={isOpen ? 'Đóng' : 'Mở'}
         >
         {isOpen ? '‹' : '›'}
@@ -115,7 +115,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, isOpen, onToggle, onFilterChang
       >
         {activeTab === 'explore' && <ExploreTab onFilterChange={handleFilterChange} mapCenter={mapCenter} cacheData={cacheData} />}
         {activeTab === 'comments' && <CommentsTab restaurant={selectedRestaurant} lastFilterKeywords={lastFilterKeywords} onRestaurantRefresh={onRestaurantRefresh} />}
-        {activeTab === 'contributions' && <ContributionsTab mapCenter={mapCenter} onShowCenterMarkerChange={onShowCenterMarkerChange} selectedRestaurantForClaim={selectedRestaurantForClaim} onRestaurantSelectedForClaim={onRestaurantSelectedForClaim} onClaimModeChange={handleClaimModeChange} />}
+        {activeTab === 'contributions' && <ContributionsTab mapCenter={mapCenter} onShowCenterMarkerChange={onShowCenterMarkerChange} selectedRestaurantForClaim={selectedRestaurantForClaim} onRestaurantSelectedForClaim={onRestaurantSelectedForClaim} onClaimModeChange={handleClaimModeChange} user={user} />}
         {activeTab === 'user' && <UserTab user={user} onUserChange={onUserChange} onNavigateToRestaurant={onNavigateToRestaurant} onFavouriteRestaurantsChange={onFavouriteRestaurantsChange} onBlacklistedRestaurantsChange={onBlacklistedRestaurantsChange} onShowFavouritesChange={onShowFavouritesChange} onShowBlacklistChange={onShowBlacklistChange} />}
       </div>
 

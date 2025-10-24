@@ -276,17 +276,17 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter, cach
   return (
     <div className="space-y-4">
       {/* Nút tìm kiếm */}
-      <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-4 shadow-md">
+      <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-3 sm:p-4 shadow-md">
         <button
           onClick={handleSearch}
           disabled={isSearching}
-          className="w-full py-3 px-4 bg-white text-blue-600 font-semibold rounded-lg hover:bg-blue-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+          className="w-full py-2 sm:py-3 px-3 sm:px-4 bg-white text-blue-600 font-semibold text-sm sm:text-base rounded-lg hover:bg-blue-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
         >
-          {isSearching ? 'Đang tìm kiếm...' : '🔍 Tìm kiếm nhà hàng'}
+          {isSearching ? 'Đang tìm kiếm...' : 'Tìm kiếm quán ăn'}
         </button>
         {searchResult && (
-          <div className="mt-2 text-white text-sm text-center">
-            Tìm thấy {searchResult.data?.length || 0} nhà hàng
+          <div className="mt-2 text-white text-xs sm:text-sm text-center">
+            Tìm thấy {searchResult.data?.length || 0} quán ăn
           </div>
         )}
       </div>
@@ -298,7 +298,7 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter, cach
         <div className="p-3">
           <input
             type="text"
-            placeholder="Tìm theo tên nhà hàng..."
+            placeholder="Tìm theo tên quán ăn..."
             value={searchKeyword}
             onChange={(e) => setSearchKeyword(e.target.value)}
             className={inputStyle}
@@ -351,7 +351,7 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter, cach
           </div>
         </>,
         <button onClick={() => setSelectedDishTypeIds(new Set())} className="text-[11px] text-gray-500 hover:text-blue-500 transition-colors">
-          Clear
+          Xoá
         </button>
       )}
 
@@ -393,13 +393,13 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter, cach
             onClick={() => setSelectedDishIds(new Set(availableDishes.map(d => d.dishId)))}
             className="text-[11px] text-gray-500 hover:text-blue-500 transition-colors"
           >
-            Select All
+            Chọn tất cả
           </button>
           <button
             onClick={() => setSelectedDishIds(new Set())}
             className="text-[11px] text-gray-500 hover:text-blue-500 transition-colors"
           >
-            Clear
+            Xoá
           </button>
         </>
       )}
@@ -437,13 +437,13 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter, cach
             onClick={() => setSelectedAmenityIds(new Set(amenities.map(a => a.id)))}
             className="text-[11px] text-gray-500 hover:text-blue-500 transition-colors"
           >
-            Select All
+            Chọn tất cả
           </button>
           <button
             onClick={() => setSelectedAmenityIds(new Set())}
             className="text-[11px] text-gray-500 hover:text-blue-500 transition-colors"
           >
-            Clear
+            Xoá
           </button>
         </>
       )}

@@ -106,7 +106,7 @@ const UserTab: React.FC<UserTabProps> = ({ user, onUserChange, onNavigateToResta
             <div className="text-center text-gray-500 text-sm">Đang tải...</div>
           ) : profile ? (
             <div className="space-y-3">
-              {/* Nhà hàng yêu thích */}
+              {/* quán ăn yêu thích */}
               <div className="bg-white rounded-lg border border-gray-200 p-3">
                 <div className="flex items-center justify-between mb-2">
                   <button
@@ -126,7 +126,7 @@ const UserTab: React.FC<UserTabProps> = ({ user, onUserChange, onNavigateToResta
                       setShowMarkers(prev => ({ ...prev, favourites: newValue }));
                       onShowFavouritesChange?.(newValue);
                     }}
-                    className="ml-2 px-2 py-1 text-xs bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"
+                    className="ml-2 px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"
                     title="Ẩn/hiện markers yêu thích"
                   >
                     {showMarkers.favourites ? 'Ẩn' : 'Hiện'}
@@ -153,13 +153,13 @@ const UserTab: React.FC<UserTabProps> = ({ user, onUserChange, onNavigateToResta
                         </div>
                       ))
                     ) : (
-                      <div className="text-xs text-gray-400 py-2">Chưa có nhà hàng yêu thích</div>
+                      <div className="text-xs text-gray-400 py-2">Chưa có quán ăn yêu thích</div>
                     )}
                   </div>
                 )}
               </div>
 
-              {/* Nhà hàng blacklist */}
+              {/* quán ăn blacklist */}
               <div className="bg-white rounded-lg border border-gray-200 p-3">
                 <div className="flex items-center justify-between mb-2">
                   <button
@@ -179,7 +179,7 @@ const UserTab: React.FC<UserTabProps> = ({ user, onUserChange, onNavigateToResta
                       setShowMarkers(prev => ({ ...prev, blacklist: newValue }));
                       onShowBlacklistChange?.(newValue);
                     }}
-                    className="ml-2 px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                    className="ml-2 px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
                     title="Ẩn/hiện markers blacklist"
                   >
                     {showMarkers.blacklist ? 'Ẩn' : 'Hiện'}
@@ -206,13 +206,13 @@ const UserTab: React.FC<UserTabProps> = ({ user, onUserChange, onNavigateToResta
                         </div>
                       ))
                     ) : (
-                      <div className="text-xs text-gray-400 py-2">Chưa có nhà hàng trong danh sách chặn</div>
+                      <div className="text-xs text-gray-400 py-2">Chưa có quán ăn trong danh sách chặn</div>
                     )}
                   </div>
                 )}
               </div>
 
-              {/* Nhà hàng sở hữu */}
+              {/* quán ăn sở hữu */}
               {profile.isRestaurantOwner && (
                 <div className="bg-white rounded-lg border border-gray-200 p-3">
                   <button
@@ -258,7 +258,7 @@ const UserTab: React.FC<UserTabProps> = ({ user, onUserChange, onNavigateToResta
                           </div>
                         ))
                       ) : (
-                        <div className="text-xs text-gray-400 py-2">Chưa có nhà hàng đang sở hữu</div>
+                        <div className="text-xs text-gray-400 py-2">Chưa có quán ăn đang sở hữu</div>
                       )}
                     </div>
                   )}

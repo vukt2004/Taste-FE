@@ -17,32 +17,32 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({ activeTab, onTabChange })
       
       <div className="flex mt-4 space-x-1">
         <button
-          className={`flex-1 p-2 rounded-lg transition-colors ${activeTab === 'explore' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+          className={`flex-1 p-1.5 sm:p-2 rounded-lg transition-colors ${activeTab === 'explore' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
           onClick={() => onTabChange('explore')}
           title="Khám phá"
         >
-          <span className="text-lg">🔍</span>
+          <span className="text-sm sm:text-lg">🔍</span>
         </button>
         <button
-          className={`flex-1 p-2 rounded-lg transition-colors ${activeTab === 'comments' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+          className={`flex-1 p-1.5 sm:p-2 rounded-lg transition-colors ${activeTab === 'comments' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
           onClick={() => onTabChange('comments')}
           title="Bình luận"
         >
-          <span className="text-lg">💬</span>
+          <span className="text-sm sm:text-lg">💬</span>
         </button>
         <button
-          className={`flex-1 p-2 rounded-lg transition-colors ${activeTab === 'contributions' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+          className={`flex-1 p-1.5 sm:p-2 rounded-lg transition-colors ${activeTab === 'contributions' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
           onClick={() => onTabChange('contributions')}
           title="Đóng góp"
         >
-          <span className="text-lg">✨</span>
+          <span className="text-sm sm:text-lg">✨</span>
         </button>
         <button
-          className={`flex-1 p-2 rounded-lg transition-colors ${activeTab === 'user' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+          className={`flex-1 p-1.5 sm:p-2 rounded-lg transition-colors ${activeTab === 'user' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
           onClick={() => onTabChange('user')}
           title="Tài khoản"
         >
-          <span className="text-lg">👤</span>
+          <span className="text-sm sm:text-lg">👤</span>
         </button>
       </div>
     </div>

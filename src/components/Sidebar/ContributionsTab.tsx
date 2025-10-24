@@ -30,9 +30,10 @@ interface ContributionsTabProps {
   selectedRestaurantForClaim?: { id: string; name: string } | null;
   onRestaurantSelectedForClaim?: (restaurant: { id: string; name: string } | null) => void;
   onClaimModeChange?: (isClaimMode: boolean) => void;
+  user?: { id: string; username: string } | null;
 }
 
-const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCenterMarkerChange, selectedRestaurantForClaim: propSelectedRestaurant, onRestaurantSelectedForClaim, onClaimModeChange }) => {
+const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCenterMarkerChange, selectedRestaurantForClaim: propSelectedRestaurant, onRestaurantSelectedForClaim, onClaimModeChange, user }) => {
   const [showModal, setShowModal] = useState(false);
   const [contributionType, setContributionType] = useState<ContributionType | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -247,7 +248,7 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
       const data = await response.json();
 
       if (response.ok && (data.isSuccess || data.success)) {
-        setSubmitSuccess('Đã gửi yêu cầu đóng góp nhà hàng thành công!');
+        setSubmitSuccess('Đã gửi yêu cầu đóng góp quán ăn thành công!');
         setTimeout(() => {
           closeModal();
         }, 2000);
@@ -346,18 +347,28 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
     <div className="space-y-4">
       <h3 className="text-sm font-semibold text-gray-700">Đóng góp</h3>
       
-      {!showModal && !showClaimModal ? (
+      {!user ? (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
+          <p className="text-sm text-yellow-800 mb-2">Vui lòng đăng nhập để đóng góp</p>
+          <button
+            onClick={() => window.location.href = '/login'}
+            className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors text-sm"
+          >
+            Đăng nhập
+          </button>
+        </div>
+      ) : !showModal && !showClaimModal ? (
         <div className="space-y-2">
           <button
             onClick={() => openModal('dish')}
-            className="w-full p-4 bg-white rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-colors text-left"
+            className="w-full p-2.5 sm:p-4 bg-white rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-colors text-left"
           >
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                <span className="text-green-600 text-lg">🍜</span>
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-green-100 rounded-full flex items-center justify-center">
+                <span className="text-green-600 text-sm sm:text-lg"></span>
               </div>
               <div>
-                <div className="font-medium text-gray-800">Đóng góp món ăn</div>
+                <div className="font-medium text-gray-800 text-sm sm:text-base">Đóng góp món ăn</div>
                 <div className="text-xs text-gray-500">Gửi đề xuất món ăn mới</div>
               </div>
             </div>
@@ -365,29 +376,29 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
 
           <button
             onClick={() => openModal('restaurant')}
-            className="w-full p-4 bg-white rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-colors text-left"
+            className="w-full p-2.5 sm:p-4 bg-white rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-colors text-left"
           >
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                <span className="text-blue-600 text-lg">🏪</span>
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                <span className="text-blue-600 text-sm sm:text-lg"></span>
               </div>
               <div>
-                <div className="font-medium text-gray-800">Đóng góp nhà hàng</div>
-                <div className="text-xs text-gray-500">Thêm nhà hàng mới vào hệ thống</div>
+                <div className="font-medium text-gray-800 text-sm sm:text-base">Đóng góp quán ăn</div>
+                <div className="text-xs text-gray-500">Thêm quán ăn mới vào hệ thống</div>
               </div>
             </div>
           </button>
 
           <button
             onClick={() => setShowClaimModal(true)}
-            className="w-full p-4 bg-white rounded-lg border border-gray-200 hover:border-yellow-400 hover:bg-yellow-50 transition-colors text-left"
+            className="w-full p-2.5 sm:p-4 bg-white rounded-lg border border-gray-200 hover:border-yellow-400 hover:bg-yellow-50 transition-colors text-left"
           >
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
-                <span className="text-yellow-600 text-lg">👑</span>
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-yellow-100 rounded-full flex items-center justify-center">
+                <span className="text-yellow-600 text-sm sm:text-lg"></span>
               </div>
               <div>
-                <div className="font-medium text-gray-800">Claim quán ăn</div>
+                <div className="font-medium text-gray-800 text-sm sm:text-base">Xác nhận quán ăn</div>
                 <div className="text-xs text-gray-500">Yêu cầu làm chủ quán ăn</div>
               </div>
             </div>
@@ -397,7 +408,7 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
         <div className="bg-white rounded-lg shadow-lg">
           {/* Claim Modal Header */}
           <div className="flex items-center justify-between p-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-800">Claim quán ăn</h2>
+            <h2 className="text-lg font-semibold text-gray-800">Xác nhận quán ăn</h2>
             <button
               onClick={() => {
                 setShowClaimModal(false);
@@ -497,7 +508,7 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
                 <button
                   onClick={handleSubmitClaim}
                   disabled={isSubmittingClaim}
-                  className={`w-full py-2 px-4 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors ${
+                  className={`w-full py-1.5 sm:py-2 px-3 sm:px-4 bg-yellow-500 text-white text-xs sm:text-sm rounded-lg hover:bg-yellow-600 transition-colors ${
                     isSubmittingClaim ? 'opacity-50 cursor-not-allowed' : ''
                   }`}
                 >
@@ -512,7 +523,7 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
           {/* Modal Header */}
           <div className="flex items-center justify-between p-4 border-b border-gray-200">
             <h2 className="text-lg font-semibold text-gray-800">
-              {contributionType === 'dish' ? 'Đóng góp món ăn' : 'Đóng góp nhà hàng'}
+              {contributionType === 'dish' ? 'Đóng góp món ăn' : 'Đóng góp quán ăn'}
             </h2>
             <button
               onClick={closeModal}
@@ -603,14 +614,14 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
                     <button
                       onClick={closeModal}
                       disabled={isSubmitting}
-                      className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className="flex-1 px-3 sm:px-4 py-1.5 sm:py-2 border border-gray-300 rounded-md text-gray-700 text-xs sm:text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                       Hủy
                     </button>
                     <button
                       onClick={handleSubmitDish}
                       disabled={!dishName.trim() || selectedDishTypeIds.length === 0 || isSubmitting}
-                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className="flex-1 px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white text-xs sm:text-sm rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                       {isSubmitting ? 'Đang gửi...' : 'Gửi yêu cầu'}
                     </button>
@@ -618,17 +629,17 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {/* 1. Tên nhà hàng */}
+                  {/* 1. Tên quán ăn */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Tên nhà hàng <span className="text-red-500">*</span>
+                      Tên quán ăn <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
                       value={restaurantName}
                       onChange={(e) => setRestaurantName(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Ví dụ: Nhà hàng ABC"
+                      placeholder="Ví dụ: quán ăn ABC"
                       required
                     />
                   </div>
@@ -643,21 +654,21 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
                       onChange={(e) => setRestaurantDescription(e.target.value)}
                       rows={3}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Mô tả về nhà hàng..."
+                      placeholder="Mô tả về quán ăn..."
                     />
                   </div>
 
-                  {/* 3. Câu chuyện nhà hàng */}
+                  {/* 3. Câu chuyện quán ăn */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Câu chuyện nhà hàng
+                      Câu chuyện quán ăn
                     </label>
                     <textarea
                       value={story}
                       onChange={(e) => setStory(e.target.value)}
                       rows={3}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Câu chuyện về nhà hàng..."
+                      placeholder="Câu chuyện về quán ăn..."
                     />
                   </div>
 
@@ -846,7 +857,7 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
                       Vị trí trên bản đồ
                     </label>
                     <div className="text-xs text-gray-500 mb-2">
-                      Di chuyển bản đồ để chọn vị trí nhà hàng
+                      Di chuyển bản đồ để chọn vị trí quán ăn
                     </div>
                     {selectedLocation && (
                       <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
@@ -860,14 +871,14 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
                     <button
                       onClick={closeModal}
                       disabled={isSubmitting}
-                      className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className="flex-1 px-3 sm:px-4 py-1.5 sm:py-2 border border-gray-300 rounded-md text-gray-700 text-xs sm:text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                       Hủy
                     </button>
                     <button
                       onClick={handleSubmitRestaurant}
                       disabled={!restaurantName.trim() || isSubmitting}
-                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className="flex-1 px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white text-xs sm:text-sm rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                       {isSubmitting ? 'Đang gửi...' : 'Gửi yêu cầu'}
                     </button>
