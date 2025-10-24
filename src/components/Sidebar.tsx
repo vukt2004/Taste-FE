@@ -114,7 +114,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, isOpen, onToggle, onFilterChang
         ${isOpen ? 'opacity-100 visible' : 'opacity-0 invisible'} transition-opacity duration-300`}
       >
         {activeTab === 'explore' && <ExploreTab onFilterChange={handleFilterChange} mapCenter={mapCenter} cacheData={cacheData} />}
-        {activeTab === 'comments' && <CommentsTab restaurant={selectedRestaurant} lastFilterKeywords={lastFilterKeywords} onRestaurantRefresh={onRestaurantRefresh} />}
+        {activeTab === 'comments' && <CommentsTab restaurant={selectedRestaurant} lastFilterKeywords={lastFilterKeywords} onRestaurantRefresh={onRestaurantRefresh} user={user} />}
         {activeTab === 'contributions' && <ContributionsTab mapCenter={mapCenter} onShowCenterMarkerChange={onShowCenterMarkerChange} selectedRestaurantForClaim={selectedRestaurantForClaim} onRestaurantSelectedForClaim={onRestaurantSelectedForClaim} onClaimModeChange={handleClaimModeChange} user={user} />}
         {activeTab === 'user' && <UserTab user={user} onUserChange={onUserChange} onNavigateToRestaurant={onNavigateToRestaurant} onFavouriteRestaurantsChange={onFavouriteRestaurantsChange} onBlacklistedRestaurantsChange={onBlacklistedRestaurantsChange} onShowFavouritesChange={onShowFavouritesChange} onShowBlacklistChange={onShowBlacklistChange} />}
       </div>
