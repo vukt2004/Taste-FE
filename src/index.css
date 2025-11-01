@@ -49,3 +49,15 @@ body {
   pointer-events: none;
   z-index: 20;
 }
+
+/* Ẩn scrollbar cho tất cả trình duyệt */
+.scrollbar-hide {
+  /* Firefox */
+  scrollbar-width: none;
+  /* Chrome, Safari, Edge */
+  -ms-overflow-style: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

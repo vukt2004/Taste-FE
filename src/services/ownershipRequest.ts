@@ -18,7 +18,7 @@ export interface OwnershipRequestDto {
   requestedByName?: string;
 }
 
-export interface ProcessOwnershipRequestDto {
+export interface ProcessOwnershipRequestDto {   
   isApproved: boolean;
   adminNotes?: string;
 }

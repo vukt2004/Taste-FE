@@ -36,7 +36,14 @@ export async function getRestaurantById(id: string) {
     method: 'GET',
     headers: getAuthHeaders(),
   });
-  return res.json();
+  
+  if (!res.ok) {
+    throw new Error('Failed to fetch restaurant');
+  }
+  
+  const response = await res.json();
+  // API trả về format ApiResponse { isSuccess, data, message, ... }
+  return response.data || response;
 }
 
 export async function createRestaurant(formData: FormData) {
@@ -70,6 +77,24 @@ export async function toggleRestaurantEdit(restaurantId: string, canEdit: boolea
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ restaurantId, canEdit, reason }),
+  });
+  return res.json();
+}
+
+export async function getAllRestaurants(includeInactive: boolean = false, includeUnverified: boolean = false) {
+  const res = await fetch(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANTS.GET_ALL}?includeInactive=${includeInactive}&includeUnverified=${includeUnverified}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+  return res.json();
+}
+
+export async function getAllRestaurantsForAdmin(includeInactive: boolean = true, includeUnverified: boolean = true) {
+  const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.ADMIN.RESTAURANTS}?includeInactive=${includeInactive}&includeUnverified=${includeUnverified}`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
   });
   return res.json();
 }

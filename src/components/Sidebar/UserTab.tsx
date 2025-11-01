@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { type User, type UserProfile, getMyProfile } from '../../services/user';
 import AuthForm from '../AuthForm';
-import RestaurantEditModal from '../RestaurantEditModal';
+import RestaurantManagementModal from './RestaurantManagementModal';
 
 interface UserTabProps {
   user: User | null;
@@ -78,6 +78,14 @@ const UserTab: React.FC<UserTabProps> = ({ user, onUserChange, onNavigateToResta
   };
 
   const handleLogout = () => {
+    // Xóa tất cả token và thông tin user từ localStorage
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('user_id');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('token_expires_at');
+    localStorage.removeItem('user_data');
+    
+    // Cập nhật state
     onUserChange?.(null);
     setProfile(null);
   };
@@ -91,14 +99,20 @@ const UserTab: React.FC<UserTabProps> = ({ user, onUserChange, onNavigateToResta
             <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
               {user.fullName?.charAt(0) || user.username?.charAt(0) || 'U'}
             </div>
-            <div className="ml-3">
+            <div className="ml-3 flex-1">
               <div className="font-medium text-gray-800">{user.fullName || user.username}</div>
               <div className="text-xs text-gray-600">{user.email}</div>
             </div>
+            <button
+              onClick={handleLogout}
+              className="ml-2 px-3 py-1.5 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
+              title="Đăng xuất"
+            >
+              Đăng xuất
+            </button>
           </div>
           <div className="text-xs text-gray-500 flex justify-between">
             <span>Điểm: {profile?.points ?? user.points}</span>
-            <span>Loại: {user.userType}</span>
           </div>
         </div>
 
@@ -133,7 +147,7 @@ const UserTab: React.FC<UserTabProps> = ({ user, onUserChange, onNavigateToResta
                   </button>
                 </div>
                 {expandedSections.favourites && (
-                  <div className="space-y-1 max-h-40 overflow-y-auto mt-2">
+                  <div className="space-y-1 max-h-40 overflow-y-auto scrollbar-hide mt-2">
                     {profile.favouriteRestaurants && profile.favouriteRestaurants.length > 0 ? (
                       profile.favouriteRestaurants.map((restaurant) => (
                         <div key={restaurant.id} className="flex items-center justify-between py-1 border-b border-gray-100 last:border-0">
@@ -186,7 +200,7 @@ const UserTab: React.FC<UserTabProps> = ({ user, onUserChange, onNavigateToResta
                   </button>
                 </div>
                 {expandedSections.blacklist && (
-                  <div className="space-y-1 max-h-40 overflow-y-auto mt-2">
+                  <div className="space-y-1 max-h-40 overflow-y-auto scrollbar-hide mt-2">
                     {profile.blacklistedRestaurants && profile.blacklistedRestaurants.length > 0 ? (
                       profile.blacklistedRestaurants.map((restaurant) => (
                         <div key={restaurant.id} className="flex items-center justify-between py-1 border-b border-gray-100 last:border-0">
@@ -214,7 +228,7 @@ const UserTab: React.FC<UserTabProps> = ({ user, onUserChange, onNavigateToResta
 
               {/* quán ăn sở hữu */}
               {profile.isRestaurantOwner && (
-                <div className="bg-white rounded-lg border border-gray-200 p-3">
+                <div className="bg-white rounded-lg border border-gray-200 p-3 space-y-3">
                   <button
                     onClick={() => toggleSection('owned')}
                     className="w-full flex items-center justify-between text-left"
@@ -227,40 +241,44 @@ const UserTab: React.FC<UserTabProps> = ({ user, onUserChange, onNavigateToResta
                     </span>
                   </button>
                   {expandedSections.owned && (
-                    <div className="space-y-1 max-h-40 overflow-y-auto mt-2">
-                      {profile.ownedRestaurants && profile.ownedRestaurants.length > 0 ? (
-                        profile.ownedRestaurants.map((restaurant) => (
-                          <div key={restaurant.id} className="flex items-center justify-between py-1 border-b border-gray-100 last:border-0">
-                            <span className="text-xs text-gray-600 flex-1">{restaurant.restaurantName}</span>
-                            <div className="flex gap-1">
-                              <button
-                                onClick={() => setSelectedRestaurantForEdit(restaurant)}
-                                className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded transition-colors"
-                                title="Chỉnh sửa"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                </svg>
-                              </button>
-                              {restaurant.latitude && restaurant.longitude && (
+                    <>
+                      <div className="space-y-1 max-h-40 overflow-y-auto scrollbar-hide">
+                        {profile.ownedRestaurants && profile.ownedRestaurants.length > 0 ? (
+                          profile.ownedRestaurants.map((restaurant) => (
+                            <div key={restaurant.id} className="flex items-center justify-between py-1 border-b border-gray-100 last:border-0">
+                              <span className="text-xs text-gray-600 flex-1">{restaurant.restaurantName}</span>
+                              <div className="flex gap-1">
                                 <button
-                                  onClick={() => onNavigateToRestaurant?.(restaurant.id, restaurant.latitude!, restaurant.longitude!)}
-                                  className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
-                                  title="Định vị trên bản đồ"
+                                  onClick={() => {
+                                    setSelectedRestaurantForEdit(restaurant);
+                                  }}
+                                  className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded transition-colors"
+                                  title="Quản lý quán ăn"
                                 >
                                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                   </svg>
                                 </button>
-                              )}
+                                {restaurant.latitude && restaurant.longitude && (
+                                  <button
+                                    onClick={() => onNavigateToRestaurant?.(restaurant.id, restaurant.latitude!, restaurant.longitude!)}
+                                    className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
+                                    title="Định vị trên bản đồ"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    </svg>
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="text-xs text-gray-400 py-2">Chưa có quán ăn đang sở hữu</div>
-                      )}
-                    </div>
+                          ))
+                        ) : (
+                          <div className="text-xs text-gray-400 py-2">Chưa có quán ăn đang sở hữu</div>
+                        )}
+                        </div>
+                    </>
                   )}
                 </div>
               )}
@@ -273,17 +291,14 @@ const UserTab: React.FC<UserTabProps> = ({ user, onUserChange, onNavigateToResta
         </div>
       )}
       
-      {/* Restaurant Edit Modal */}
-      {selectedRestaurantForEdit && (
-        <RestaurantEditModal
-          restaurant={selectedRestaurantForEdit}
-          onClose={() => setSelectedRestaurantForEdit(null)}
-          onUpdate={() => {
-            loadProfile();
-            setSelectedRestaurantForEdit(null);
-          }}
-        />
-      )}
+      {/* Restaurant Management Modal */}
+      <RestaurantManagementModal
+        restaurant={selectedRestaurantForEdit}
+        onClose={() => setSelectedRestaurantForEdit(null)}
+        onUpdate={() => {
+          loadProfile();
+        }}
+      />
     </div>
   );
 };

@@ -100,4 +100,12 @@ export async function getMyProfile(): Promise<UserProfile | null> {
   }
 }
 
+export async function getAllUsersForAdmin() {
+  const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.ADMIN.USERS}`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+  return res.json();
+}
+
 

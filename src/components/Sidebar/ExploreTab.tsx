@@ -1,29 +1,23 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { listDishTypes } from '../../services/dishType';
+import { listDishes } from '../../services/dish';
 import { listAmenities } from '../../services/amenity';
 import { type RestaurantFilter, filterRestaurants } from '../../services/restaurant';
+import AlertModal from './contribution/AlertModal';
 
 interface CacheData {
   amenities: Array<{ id: string; name: string; isActive: boolean }>;
   dishes: Array<{ id: string; name: string }>;
-  dishTypes: Array<{ id: string; typeName: string }>;
+}
+
+interface Dish {
+  id: string;
+  name: string;
 }
 
 interface ExploreTabProps {
   onFilterChange: (filter: RestaurantFilter) => void;
   mapCenter?: { lat: number; lng: number };
   cacheData?: CacheData;
-}
-
-interface DishCategory {
-  dishId: string;
-  dishName: string;
-}
-
-interface DishType {
-  id: string;
-  typeName: string;
-  dishCategories: DishCategory[];
 }
 
 interface Amenity {
@@ -39,7 +33,9 @@ const calculateBoundingBox = (lat: number, lng: number, radiusKm: number) => {
   // 1 độ latitude ≈ 111 km
   // 1 độ longitude ≈ 111 km * cos(latitude)
   const latDelta = radiusKm / 111;
-  const lngDelta = radiusKm / (111 * Math.cos(lat * Math.PI / 180));
+  const cosLat = Math.cos(lat * Math.PI / 180);
+  // Tránh chia cho 0 hoặc giá trị quá nhỏ
+  const lngDelta = cosLat > 0.01 ? radiusKm / (111 * cosLat) : radiusKm / 111;
   
   return {
     southWestLat: lat - latDelta,
@@ -50,11 +46,8 @@ const calculateBoundingBox = (lat: number, lng: number, radiusKm: number) => {
 };
 
 const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter, cacheData }) => {
-  const [dishTypes, setDishTypes] = useState<DishType[]>([]);
-  const [selectedDishTypeIds, setSelectedDishTypeIds] = useState<Set<string>>(new Set());
   const [selectedDishIds, setSelectedDishIds] = useState<Set<string>>(new Set());
-  const [availableDishes, setAvailableDishes] = useState<DishCategory[]>([]);
-  const [categorySearch, setCategorySearch] = useState('');
+  const [availableDishes, setAvailableDishes] = useState<Dish[]>([]);
   
   const [amenities, setAmenities] = useState<Amenity[]>([]);
   const [selectedAmenityIds, setSelectedAmenityIds] = useState<Set<string>>(new Set());
@@ -68,6 +61,19 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter, cach
   const [searchKeyword, setSearchKeyword] = useState('');
   const [priceRange, setPriceRange] = useState('');
   const [dishSearchTerm, setDishSearchTerm] = useState('');
+  
+  // Alert modal state
+  const [alertModal, setAlertModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'success' | 'error' | 'info';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info',
+  });
   
   // Collapsible sections
   const [expandedSections, setExpandedSections] = useState({
@@ -86,64 +92,119 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter, cach
   };
 
   useEffect(() => {
-    // Always load data from API to get full structure with dishCategories
-    const loadDishTypes = async () => {
-      const res = await listDishTypes();
-      const data = res?.data ?? res ?? [];
-      setDishTypes(data);
+    // Load dishes with localStorage cache
+    const loadDishes = async () => {
+      const CACHE_KEY_DISHES = 'tastemap_dishes_cache';
+      const CACHE_EXPIRY = 1000 * 60 * 30; // 30 minutes
 
-      const allDishes: DishCategory[] = [];
-      data.forEach((dt: DishType) => {
-        if (dt.dishCategories) allDishes.push(...dt.dishCategories);
-      });
-      
-      // Remove duplicates by dishId
-      const uniqueDishes = allDishes.filter((dish, index, self) => 
-        index === self.findIndex(d => d.dishId === dish.dishId)
-      );
-      
-      setAvailableDishes(uniqueDishes);
+      // Try cacheData first
+      if (cacheData && cacheData.dishes && cacheData.dishes.length > 0) {
+        setAvailableDishes(cacheData.dishes);
+        // Also save to localStorage for future use
+        localStorage.setItem(CACHE_KEY_DISHES, JSON.stringify({
+          data: cacheData.dishes,
+          timestamp: Date.now()
+        }));
+        return;
+      }
+
+      // Try localStorage cache
+      try {
+        const cached = localStorage.getItem(CACHE_KEY_DISHES);
+        if (cached) {
+          const { data, timestamp } = JSON.parse(cached);
+          const now = Date.now();
+          if (data && data.length > 0 && (now - timestamp) < CACHE_EXPIRY) {
+            setAvailableDishes(data);
+            return;
+          }
+        }
+      } catch {
+        // Failed to read cache, continue to fetch from API
+      }
+
+      // Fetch from API
+      try {
+        const dishes = await listDishes();
+        const dishesList = dishes || [];
+        setAvailableDishes(dishesList);
+        
+        // Save to localStorage
+        localStorage.setItem(CACHE_KEY_DISHES, JSON.stringify({
+          data: dishesList,
+          timestamp: Date.now()
+        }));
+      } catch {
+        setAvailableDishes([]);
+      }
     };
-    loadDishTypes();
+    loadDishes();
     
+    // Load amenities with localStorage cache
     const loadAmenities = async () => {
-      // Use cache if available, otherwise load from API
+      const CACHE_KEY_AMENITIES = 'tastemap_amenities_cache';
+      const CACHE_EXPIRY = 1000 * 60 * 30; // 30 minutes
+
+      // Try cacheData first
       if (cacheData && cacheData.amenities.length > 0) {
         setAmenities(cacheData.amenities);
-      } else {
-        const res = await listAmenities({ activeOnly: true });
-        const data = res?.data ?? res ?? [];
-        setAmenities(data);
+        // Also save to localStorage for future use
+        localStorage.setItem(CACHE_KEY_AMENITIES, JSON.stringify({
+          data: cacheData.amenities,
+          timestamp: Date.now()
+        }));
+        return;
       }
+
+      // Try localStorage cache
+      try {
+        const cached = localStorage.getItem(CACHE_KEY_AMENITIES);
+        if (cached) {
+          const { data, timestamp } = JSON.parse(cached);
+          const now = Date.now();
+          if (data && data.length > 0 && (now - timestamp) < CACHE_EXPIRY) {
+            setAmenities(data);
+            return;
+          }
+        }
+      } catch {
+        // Failed to read cache, continue to fetch from API
+      }
+
+      // Fetch from API
+      const res = await listAmenities({ activeOnly: true });
+      const data = res?.data ?? res ?? [];
+      setAmenities(data);
+      
+      // Save to localStorage
+      localStorage.setItem(CACHE_KEY_AMENITIES, JSON.stringify({
+        data: data,
+        timestamp: Date.now()
+      }));
     };
     loadAmenities();
   }, [cacheData]);
 
-  useEffect(() => {
-    const newAvailable: DishCategory[] = [];
-    if (selectedDishTypeIds.size === 0) {
-      dishTypes.forEach(dt => dt.dishCategories && newAvailable.push(...dt.dishCategories));
-    } else {
-      dishTypes.forEach(dt => {
-        if (selectedDishTypeIds.has(dt.id)) newAvailable.push(...dt.dishCategories);
-      });
-    }
+  // useEffect(() => {
+  //   // Load all dishes without category filtering
+  //   const newAvailable: DishCategory[] = [];
+  //   dishTypes.forEach(dt => dt.dishCategories && newAvailable.push(...dt.dishCategories));
     
-    // Remove duplicates by dishId
-    const uniqueDishes = newAvailable.filter((dish, index, self) => 
-      index === self.findIndex(d => d.dishId === dish.dishId)
-    );
+  //   // Remove duplicates by dishId
+  //   const uniqueDishes = newAvailable.filter((dish, index, self) => 
+  //     index === self.findIndex(d => d.dishId === dish.dishId)
+  //   );
     
-    setAvailableDishes(uniqueDishes);
+  //   setAvailableDishes(uniqueDishes);
 
-    setSelectedDishIds(prev => {
-      const newSet = new Set<string>();
-      prev.forEach(id => {
-        if (uniqueDishes.some(d => d.dishId === id)) newSet.add(id);
-      });
-      return newSet;
-    });
-  }, [selectedDishTypeIds, dishTypes]);
+  //   setSelectedDishIds(prev => {
+  //     const newSet = new Set<string>();
+  //     prev.forEach(id => {
+  //       if (uniqueDishes.some(d => d.dishId === id)) newSet.add(id);
+  //     });
+  //     return newSet;
+  //   });
+  // }, [dishTypes]);
 
   // Tự động cập nhật bounding box khi mapCenter thay đổi và đã có kết quả tìm kiếm trước đó
   useEffect(() => {
@@ -186,53 +247,73 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter, cach
   }, [mapCenter, selectedDishIds, selectedAmenityIds, searchResult, searchKeyword, priceRange, onFilterChange]);
 
 
-  const handleSearch = async () => {
-    const filter: RestaurantFilter = {
-      verifiedOnly: true,
-      activeOnly: true,
-      limit: 500,
-      dishIds: selectedDishIds.size > 0 ? Array.from(selectedDishIds) : undefined,
-      amenityIds: selectedAmenityIds.size > 0 ? Array.from(selectedAmenityIds) : undefined,
-      searchKeyword: searchKeyword.trim() || undefined,
-      priceRange: priceRange.trim() || undefined,
-    };
-    
-    // Thêm thông tin vùng địa lý nếu có mapCenter
-    if (mapCenter) {
-      const bbox = calculateBoundingBox(mapCenter.lat, mapCenter.lng, RADIUS_KM);
-      filter.southWestLat = bbox.southWestLat;
-      filter.southWestLng = bbox.southWestLng;
-      filter.northEastLat = bbox.northEastLat;
-      filter.northEastLng = bbox.northEastLng;
-    } else {
-      // Nếu không có mapCenter, sử dụng tọa độ mặc định (Hồ Chí Minh)
-      const defaultCenter = { lat: 10.8231, lng: 106.6297 };
-      const bbox = calculateBoundingBox(defaultCenter.lat, defaultCenter.lng, RADIUS_KM);
-      filter.southWestLat = bbox.southWestLat;
-      filter.southWestLng = bbox.southWestLng;
-      filter.northEastLat = bbox.northEastLat;
-      filter.northEastLng = bbox.northEastLng;
+  const handleSearch = async (e?: React.MouseEvent) => {
+    // Ngăn chặn event propagation nếu có
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
     }
     
-    setIsSearching(true);
     try {
+      const filter: RestaurantFilter = {
+        verifiedOnly: true,
+        activeOnly: true,
+        limit: 500,
+        dishIds: selectedDishIds.size > 0 ? Array.from(selectedDishIds) : undefined,
+        amenityIds: selectedAmenityIds.size > 0 ? Array.from(selectedAmenityIds) : undefined,
+        searchKeyword: searchKeyword.trim() || undefined,
+        priceRange: priceRange.trim() || undefined,
+      };
+      
+      // Thêm thông tin vùng địa lý nếu có mapCenter
+      if (mapCenter && !isNaN(mapCenter.lat) && !isNaN(mapCenter.lng)) {
+        const bbox = calculateBoundingBox(mapCenter.lat, mapCenter.lng, RADIUS_KM);
+        filter.southWestLat = bbox.southWestLat;
+        filter.southWestLng = bbox.southWestLng;
+        filter.northEastLat = bbox.northEastLat;
+        filter.northEastLng = bbox.northEastLng;
+      } else {
+        // Nếu không có mapCenter, sử dụng tọa độ mặc định (Hồ Chí Minh)
+        const defaultCenter = { lat: 10.8231, lng: 106.6297 };
+        const bbox = calculateBoundingBox(defaultCenter.lat, defaultCenter.lng, RADIUS_KM);
+        filter.southWestLat = bbox.southWestLat;
+        filter.southWestLng = bbox.southWestLng;
+        filter.northEastLat = bbox.northEastLat;
+        filter.northEastLng = bbox.northEastLng;
+      }
+      
+      setIsSearching(true);
       const result = await filterRestaurants(filter);
       setSearchResult(result);
       onFilterChange(filter);
-    } catch (error) {
-      console.error('Lỗi tìm kiếm:', error);
-      alert('Có lỗi xảy ra khi tìm kiếm');
+    } catch {
+      setAlertModal({
+        isOpen: true,
+        title: 'Lỗi',
+        message: 'Có lỗi xảy ra khi tìm kiếm',
+        type: 'error',
+      });
     } finally {
       setIsSearching(false);
     }
   };
 
-  const handleToggleSet = (setFn: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) => {
+  const handleToggleSet = (setFn: React.Dispatch<React.SetStateAction<Set<string>>>, id: string, maxItems?: number) => {
     setFn(prev => {
       const s = new Set(prev);
       if (s.has(id)) {
         s.delete(id);
       } else {
+        // Check max items limit
+        if (maxItems && s.size >= maxItems) {
+          setAlertModal({
+            isOpen: true,
+            title: 'Thông báo',
+            message: `Bạn chỉ có thể chọn tối đa ${maxItems} món ăn`,
+            type: 'info',
+          });
+          return s;
+        }
         s.add(id);
       }
       return s;
@@ -278,7 +359,10 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter, cach
       {/* Nút tìm kiếm */}
       <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-3 sm:p-4 shadow-md">
         <button
-          onClick={handleSearch}
+          type="button"
+          onClick={(e) => {
+            handleSearch(e);
+          }}
           disabled={isSearching}
           className="w-full py-2 sm:py-3 px-3 sm:px-4 bg-white text-blue-600 font-semibold text-sm sm:text-base rounded-lg hover:bg-blue-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
         >
@@ -322,7 +406,7 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter, cach
       )}
 
       {/* DANH MỤC */}
-      {collapsibleSection(
+      {/* {collapsibleSection(
         'Danh mục',
         'categories',
         <>
@@ -335,7 +419,7 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter, cach
               className={inputStyle}
             />
           </div>
-          <div className="grid grid-cols-2 gap-1 px-2 pb-2 max-h-60 overflow-y-auto">
+          <div className="grid grid-cols-2 gap-1 px-2 pb-2 max-h-60 overflow-y-auto scrollbar-hide">
             {(() => {
               const filteredDishTypes = dishTypes.filter(dt => !categorySearch || dt.typeName.toLowerCase().includes(categorySearch.toLowerCase()));
               return filteredDishTypes.map((dt, index) => (
@@ -353,7 +437,7 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter, cach
         <button onClick={() => setSelectedDishTypeIds(new Set())} className="text-[11px] text-gray-500 hover:text-blue-500 transition-colors">
           Xoá
         </button>
-      )}
+      )} */}
 
       {/* MÓN ĂN */}
       {collapsibleSection(
@@ -369,19 +453,19 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter, cach
               className={inputStyle}
             />
           </div>
-          <div className="grid grid-cols-2 gap-1 px-2 pb-2 max-h-72 overflow-y-auto">
+          <div className="grid grid-cols-2 gap-1 px-2 pb-2 max-h-72 overflow-y-auto scrollbar-hide">
             {availableDishes.length === 0 ? (
-              <div className="col-span-2 text-center text-gray-400 text-sm py-6">Không có món ăn</div>
+              <div className="col-span-2 text-center text-gray-400 text-sm py-6">Không có món ăn ({availableDishes.length})</div>
             ) : (
               (() => {
-                const filteredDishes = availableDishes.filter(d => !dishSearchTerm || d.dishName.toLowerCase().includes(dishSearchTerm.toLowerCase()));
+                const filteredDishes = availableDishes.filter(d => !dishSearchTerm || d.name.toLowerCase().includes(dishSearchTerm.toLowerCase()));
                 return filteredDishes.map((d, index) => (
                   <div
-                    key={`${d.dishId}-${index}`}
-                    className={itemStyle(selectedDishIds.has(d.dishId))}
-                    onClick={() => handleToggleSet(setSelectedDishIds, d.dishId)}
+                    key={`${d.id}-${index}`}
+                    className={itemStyle(selectedDishIds.has(d.id))}
+                    onClick={() => handleToggleSet(setSelectedDishIds, d.id, 10)}
                   >
-                    {d.dishName}
+                    {d.name}
                   </div>
                 ));
               })()
@@ -389,12 +473,9 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter, cach
           </div>
         </>,
         <>
-          <button
-            onClick={() => setSelectedDishIds(new Set(availableDishes.map(d => d.dishId)))}
-            className="text-[11px] text-gray-500 hover:text-blue-500 transition-colors"
-          >
-            Chọn tất cả
-          </button>
+          <span className="text-[11px] text-gray-500">
+            {selectedDishIds.size}/10
+          </span>
           <button
             onClick={() => setSelectedDishIds(new Set())}
             className="text-[11px] text-gray-500 hover:text-blue-500 transition-colors"
@@ -418,14 +499,14 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter, cach
               className={inputStyle}
             />
           </div>
-          <div className="grid grid-cols-2 gap-1 px-2 pb-2 max-h-60 overflow-y-auto">
+          <div className="grid grid-cols-2 gap-1 px-2 pb-2 max-h-60 overflow-y-auto scrollbar-hide">
             {amenities
               .filter(a => !amenitySearch || a.name.toLowerCase().includes(amenitySearch.toLowerCase()))
               .map((a, index) => (
                 <div
                   key={`${a.id}-${index}`}
                   className={itemStyle(selectedAmenityIds.has(a.id))}
-                  onClick={() => handleToggleSet(setSelectedAmenityIds, a.id)}
+                  onClick={() => handleToggleSet(setSelectedAmenityIds, a.id, 10)}
                 >
                   {a.name}
                 </div>
@@ -433,12 +514,9 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter, cach
           </div>
         </>,
         <>
-          <button
-            onClick={() => setSelectedAmenityIds(new Set(amenities.map(a => a.id)))}
-            className="text-[11px] text-gray-500 hover:text-blue-500 transition-colors"
-          >
-            Chọn tất cả
-          </button>
+          <span className="text-[11px] text-gray-500">
+            {selectedAmenityIds.size}/10
+          </span>
           <button
             onClick={() => setSelectedAmenityIds(new Set())}
             className="text-[11px] text-gray-500 hover:text-blue-500 transition-colors"
@@ -447,6 +525,14 @@ const ExploreTab: React.FC<ExploreTabProps> = ({ onFilterChange, mapCenter, cach
           </button>
         </>
       )}
+      
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        title={alertModal.title}
+        message={alertModal.message}
+        type={alertModal.type}
+        onClose={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };

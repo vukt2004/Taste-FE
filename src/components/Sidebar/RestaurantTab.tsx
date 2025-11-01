@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { toggleFavourite } from '../../services/favourite';
 import { toggleBlacklist } from '../../services/blacklist';
-import { toggleReviewLike, toggleReviewDislike, createReview, uploadReviewImages } from '../../services/review';
+import { toggleReviewLike, toggleReviewDislike, createReview } from '../../services/review';
+import AlertModal from './contribution/AlertModal';
 
 interface RestaurantDish {
   id: string;
@@ -21,7 +22,6 @@ interface Review {
   reviewerDisplayName: string;
   rating: number;
   content?: string;
-  images?: string;
   reviewScore: number;
   userLiked?: boolean;
   userDisliked?: boolean;
@@ -44,6 +44,7 @@ interface Restaurant {
   createdAt?: string;
   updatedAt?: string;
   ownerName?: string;
+  ownerId?: string;
   dishes?: RestaurantDish[];
   restaurantAmenities?: Amenity[];
   isFavourite?: boolean;
@@ -54,7 +55,7 @@ interface Restaurant {
   averageRating?: number;
 }
 
-interface CommentsTabProps {
+interface RestaurantTabProps {
   restaurant?: Restaurant | null;
   lastFilterKeywords?: {
     dishIds?: string[];
@@ -71,6 +72,7 @@ interface ReviewItemProps {
 const ReviewItem: React.FC<ReviewItemProps> = ({ review }) => {
   const [isLiked, setIsLiked] = useState(review.userLiked ?? false);
   const [isDisliked, setIsDisliked] = useState(review.userDisliked ?? false);
+  const [reviewScore, setReviewScore] = useState(review.reviewScore);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleLike = async () => {
@@ -78,12 +80,17 @@ const ReviewItem: React.FC<ReviewItemProps> = ({ review }) => {
     
     setIsLoading(true);
     try {
-      await toggleReviewLike(review.id);
-      if (isDisliked) {
-        await toggleReviewDislike(review.id);
-        setIsDisliked(false);
+      const response = await toggleReviewLike(review.id);
+      if (response?.data) {
+        setReviewScore(response.data.reviewScore ?? reviewScore);
+        setIsLiked(response.data.isLiked ?? !isLiked);
+        // Backend tự động xóa dislike nếu có, nên cập nhật state
+        if (response.data.isLiked) {
+          setIsDisliked(false);
+        }
+      } else {
+        setIsLiked(!isLiked);
       }
-      setIsLiked(!isLiked);
     } catch (error) {
       console.error('Error toggling like:', error);
     } finally {
@@ -96,12 +103,17 @@ const ReviewItem: React.FC<ReviewItemProps> = ({ review }) => {
     
     setIsLoading(true);
     try {
-      await toggleReviewDislike(review.id);
-      if (isLiked) {
-        await toggleReviewLike(review.id);
-        setIsLiked(false);
+      const response = await toggleReviewDislike(review.id);
+      if (response?.data) {
+        setReviewScore(response.data.reviewScore ?? reviewScore);
+        setIsDisliked(response.data.isDisliked ?? !isDisliked);
+        // Backend tự động xóa like nếu có, nên cập nhật state
+        if (response.data.isDisliked) {
+          setIsLiked(false);
+        }
+      } else {
+        setIsDisliked(!isDisliked);
       }
-      setIsDisliked(!isDisliked);
     } catch (error) {
       console.error('Error toggling dislike:', error);
     } finally {
@@ -121,24 +133,6 @@ const ReviewItem: React.FC<ReviewItemProps> = ({ review }) => {
     });
   };
 
-  const images = review.images ? (() => {
-    try {
-      console.log('Review images raw:', review.images);
-      const parsed = JSON.parse(review.images);
-      console.log('Review images parsed:', parsed);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (e) {
-      console.error('Error parsing review images:', e);
-      return [];
-    }
-  })() : [];
-  
-  console.log('Review item data:', {
-    id: review.id,
-    images: review.images,
-    parsedImages: images,
-    content: review.content
-  });
 
   return (
     <div className="border-b border-gray-200 pb-3 last:border-b-0">
@@ -157,92 +151,144 @@ const ReviewItem: React.FC<ReviewItemProps> = ({ review }) => {
         <span className="text-xs text-gray-500">{formatDate(review.createdAt)}</span>
       </div>
 
-      {/* Content and Image */}
-      <div className="flex gap-3">
-        {/* Left: Content */}
-        <div className="flex-1">
-          {review.content && (
-            <div className="text-sm text-gray-600 mb-2">{review.content}</div>
-          )}
-          
-          {/* Image Preview */}
-          {images.length > 0 && (
-            <div className="mb-2">
-              <img 
-                src={images[0]} 
-                alt="Review" 
-                className="w-24 h-24 object-cover rounded-lg border border-gray-300"
-              />
-            </div>
-          )}
-        </div>
-        
-        {/* Right: Stars */}
-        <div className="flex flex-col items-center gap-1">
-          <div className="text-xs text-gray-500">Đánh giá</div>
-          <div className="flex flex-col items-center">
-            {[1, 2, 3, 4, 5].map((star) => (
-              <span key={star} className={`text-lg ${star <= Math.round(review.rating) ? 'text-yellow-400' : 'text-gray-300'}`}>
-                ★
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
+      {/* Content */}
+      {review.content ? (
+        <div className="text-sm text-gray-700 mb-2 min-h-[1.5rem]">{review.content}</div>
+      ) : (
+        <div className="text-sm text-gray-400 italic mb-2 min-h-[1.5rem]">Không có nội dung đánh giá</div>
+      )}
 
       {/* Like/Dislike and Score */}
+      {/* Sắp xếp: nút đã active (đã like/dislike) hiển thị trước */}
       <div className="flex items-center gap-1.5 sm:gap-2 mt-2">
-        <button
-          onClick={handleLike}
-          disabled={isLoading}
-          className={`px-2 sm:px-3 py-0.5 sm:py-1 rounded text-xs transition-colors flex items-center gap-0.5 sm:gap-1 ${
-            isLiked ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-        >
-          <span className="text-xs sm:text-sm">👍</span>
-          <span>Like</span>
-        </button>
-        <button
-          onClick={handleDislike}
-          disabled={isLoading}
-          className={`px-2 sm:px-3 py-0.5 sm:py-1 rounded text-xs transition-colors flex items-center gap-0.5 sm:gap-1 ${
-            isDisliked ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-        >
-          <span className="text-xs sm:text-sm">👎</span>
-          <span>Dislike</span>
-        </button>
+        {isLiked ? (
+          <button
+            onClick={handleLike}
+            disabled={isLoading}
+            className={`px-2 sm:px-3 py-0.5 sm:py-1 rounded text-xs transition-colors flex items-center gap-0.5 sm:gap-1 bg-blue-500 text-white hover:bg-blue-600 ${
+              isLoading ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
+          >
+            <span className="text-xs sm:text-sm">👍</span>
+            <span>Like</span>
+          </button>
+        ) : null}
+        {isDisliked ? (
+          <button
+            onClick={handleDislike}
+            disabled={isLoading}
+            className={`px-2 sm:px-3 py-0.5 sm:py-1 rounded text-xs transition-colors flex items-center gap-0.5 sm:gap-1 bg-red-500 text-white hover:bg-red-600 ${
+              isLoading ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
+          >
+            <span className="text-xs sm:text-sm">👎</span>
+            <span>Dislike</span>
+          </button>
+        ) : null}
+        {!isLiked && (
+          <button
+            onClick={handleLike}
+            disabled={isLoading}
+            className={`px-2 sm:px-3 py-0.5 sm:py-1 rounded text-xs transition-colors flex items-center gap-0.5 sm:gap-1 bg-gray-100 text-gray-600 hover:bg-gray-200 ${
+              isLoading ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
+          >
+            <span className="text-xs sm:text-sm">👍</span>
+            <span>Like</span>
+          </button>
+        )}
+        {!isDisliked && (
+          <button
+            onClick={handleDislike}
+            disabled={isLoading}
+            className={`px-2 sm:px-3 py-0.5 sm:py-1 rounded text-xs transition-colors flex items-center gap-0.5 sm:gap-1 bg-gray-100 text-gray-600 hover:bg-gray-200 ${
+              isLoading ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
+          >
+            <span className="text-xs sm:text-sm">👎</span>
+            <span>Dislike</span>
+          </button>
+        )}
         <span className="text-xs text-gray-500 ml-auto">
-          Điểm: {review.reviewScore}
+          Điểm: {reviewScore}
         </span>
       </div>
     </div>
   );
 };
 
-const CommentsTab: React.FC<CommentsTabProps> = ({ restaurant, lastFilterKeywords, onRestaurantRefresh, user }) => {
+const RestaurantTab: React.FC<RestaurantTabProps> = ({ restaurant, lastFilterKeywords, onRestaurantRefresh, user }) => {
   const [showAllDishes, setShowAllDishes] = useState(false);
   const [showAllAmenities, setShowAllAmenities] = useState(false);
-  const [isFavourite, setIsFavourite] = useState(false);
-  const [isBlacklisted, setIsBlacklisted] = useState(false);
+  const [isFavourite, setIsFavourite] = useState(restaurant?.isFavourite ?? false);
+  const [isBlacklisted, setIsBlacklisted] = useState(restaurant?.isBlacklisted ?? false);
   const [isLoadingFavourite, setIsLoadingFavourite] = useState(false);
   const [isLoadingBlacklist, setIsLoadingBlacklist] = useState(false);
   
   // Review form state
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewContent, setReviewContent] = useState('');
-  const [reviewImage, setReviewImage] = useState<File | null>(null);
-  const [reviewImagePreview, setReviewImagePreview] = useState<string | null>(null);
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Alert modal state
+  const [alertModal, setAlertModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'success' | 'error' | 'info';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info',
+  });
 
-  // Load initial state from API response
+  // Track previous restaurant to detect changes - using ID and important fields instead of object reference
+  const prevRestaurantIdRef = useRef<string | null>(null);
+  const prevFavouriteRef = useRef<boolean | null>(null);
+  const prevBlacklistedRef = useRef<boolean | null>(null);
+  const isFirstRender = useRef(true);
+  
+  // Load initial state from API response - luôn load khi restaurant prop thay đổi
   useEffect(() => {
-    if (restaurant) {
-      setIsFavourite(restaurant.isFavourite ?? false);
-      setIsBlacklisted(restaurant.isBlacklisted ?? false);
+    if (!restaurant) {
+      setIsFavourite(false);
+      setIsBlacklisted(false);
+      prevRestaurantIdRef.current = null;
+      prevFavouriteRef.current = null;
+      prevBlacklistedRef.current = null;
+      return;
+    }
+    
+    const currentRestaurantId = restaurant.id;
+    const currentFavourite = restaurant.isFavourite ?? false;
+    const currentBlacklisted = restaurant.isBlacklisted ?? false;
+    
+    // Chỉ update khi restaurant ID thay đổi hoặc lần đầu render
+    const restaurantIdChanged = prevRestaurantIdRef.current !== currentRestaurantId;
+    
+    if (restaurantIdChanged || isFirstRender.current) {
+      setIsFavourite(currentFavourite);
+      setIsBlacklisted(currentBlacklisted);
+      
+      // Update refs
+      prevRestaurantIdRef.current = currentRestaurantId;
+      prevFavouriteRef.current = currentFavourite;
+      prevBlacklistedRef.current = currentBlacklisted;
+      isFirstRender.current = false;
+    } else {
+      // Nếu restaurant ID không đổi nhưng giá trị từ API thay đổi, cập nhật
+      if (prevFavouriteRef.current !== currentFavourite) {
+        setIsFavourite(currentFavourite);
+        prevFavouriteRef.current = currentFavourite;
+      }
+      if (prevBlacklistedRef.current !== currentBlacklisted) {
+        setIsBlacklisted(currentBlacklisted);
+        prevBlacklistedRef.current = currentBlacklisted;
+      }
     }
   }, [restaurant]);
+  
 
   const handleToggleFavourite = async () => {
     if (!restaurant || isLoadingFavourite) return;
@@ -251,6 +297,10 @@ const CommentsTab: React.FC<CommentsTabProps> = ({ restaurant, lastFilterKeyword
     try {
       const result = await toggleFavourite(restaurant.id);
       setIsFavourite(result.isFavourite);
+      // Refresh restaurant data để đảm bảo trạng thái đồng bộ
+      if (onRestaurantRefresh) {
+        await onRestaurantRefresh();
+      }
     } catch (error) {
       console.error('Error toggling favourite:', error);
     } finally {
@@ -265,6 +315,10 @@ const CommentsTab: React.FC<CommentsTabProps> = ({ restaurant, lastFilterKeyword
     try {
       const result = await toggleBlacklist(restaurant.id);
       setIsBlacklisted(result.isBlacklisted);
+      // Refresh restaurant data để đảm bảo trạng thái đồng bộ
+      if (onRestaurantRefresh) {
+        await onRestaurantRefresh();
+      }
     } catch (error) {
       console.error('Error toggling blacklist:', error);
     } finally {
@@ -277,54 +331,34 @@ const CommentsTab: React.FC<CommentsTabProps> = ({ restaurant, lastFilterKeyword
     
     setIsSubmittingReview(true);
     try {
-      // Upload image if selected
-      let imageUrl: string | undefined;
-      if (reviewImage) {
-        const urls = await uploadReviewImages([reviewImage]);
-        imageUrl = urls[0];
-      }
-      
       await createReview({
         restaurantId: restaurant.id,
         rating: reviewRating,
-        content: reviewContent || undefined,
-        images: imageUrl ? JSON.stringify([imageUrl]) : undefined
+        content: reviewContent || undefined
       });
       
       // Reset form
       setReviewRating(5);
       setReviewContent('');
-      setReviewImage(null);
-      setReviewImagePreview(null);
       
       // Refresh restaurant data instead of reloading page
-      alert('Đánh giá đã được gửi thành công! Đang chờ admin duyệt.');
+      setAlertModal({
+        isOpen: true,
+        title: 'Thành công',
+        message: 'Đánh giá đã được gửi thành công! Đang chờ admin duyệt.',
+        type: 'success',
+      });
       onRestaurantRefresh?.();
     } catch (error) {
       console.error('Error submitting review:', error);
-      alert('Có lỗi xảy ra khi gửi đánh giá. Vui lòng thử lại.');
+      setAlertModal({
+        isOpen: true,
+        title: 'Lỗi',
+        message: 'Có lỗi xảy ra khi gửi đánh giá. Vui lòng thử lại.',
+        type: 'error',
+      });
     } finally {
       setIsSubmittingReview(false);
-    }
-  };
-
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setReviewImage(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setReviewImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleRemoveImage = () => {
-    setReviewImage(null);
-    setReviewImagePreview(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
     }
   };
 
@@ -359,6 +393,7 @@ const CommentsTab: React.FC<CommentsTabProps> = ({ restaurant, lastFilterKeyword
     }
   };
 
+
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-semibold text-gray-700">Chi tiết & Bình luận</h3>
@@ -367,32 +402,65 @@ const CommentsTab: React.FC<CommentsTabProps> = ({ restaurant, lastFilterKeyword
         <>
           <div className="p-3 bg-white rounded-lg border border-gray-200 relative">
             {/* Nút Yêu thích và Blacklist - chỉ hiển thị khi đã đăng nhập */}
+            {/* Sắp xếp: nút đã active (đã thực hiện) hiển thị trước */}
             {user && (
               <div className="absolute top-3 right-3 flex gap-2">
-                <button
-                  onClick={handleToggleFavourite}
-                  disabled={isLoadingFavourite}
-                  className={`p-2 rounded-full transition-colors ${
-                    isFavourite ? 'bg-yellow-100 text-yellow-600' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                  } ${isLoadingFavourite ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  title={isFavourite ? 'Bỏ yêu thích' : 'Yêu thích'}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                </button>
-                <button
-                  onClick={handleToggleBlacklist}
-                  disabled={isLoadingBlacklist}
-                  className={`p-2 rounded-full transition-colors ${
-                    isBlacklisted ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                  } ${isLoadingBlacklist ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  title={isBlacklisted ? 'Bỏ cấm' : 'Cấm'}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                </button>
+                {isFavourite ? (
+                  <button
+                    onClick={handleToggleFavourite}
+                    disabled={isLoadingFavourite}
+                    className={`p-2 rounded-full transition-colors bg-yellow-100 text-yellow-600 hover:bg-yellow-200 ${
+                      isLoadingFavourite ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                    title="Bỏ yêu thích"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                  </button>
+                ) : null}
+                {isBlacklisted ? (
+                  <button
+                    onClick={handleToggleBlacklist}
+                    disabled={isLoadingBlacklist}
+                    className={`p-2 rounded-full transition-colors bg-red-100 text-red-600 hover:bg-red-200 ${
+                      isLoadingBlacklist ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                    title="Bỏ cấm"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                ) : null}
+                {!isFavourite && (
+                  <button
+                    onClick={handleToggleFavourite}
+                    disabled={isLoadingFavourite}
+                    className={`p-2 rounded-full transition-colors bg-gray-100 text-gray-400 hover:bg-gray-200 ${
+                      isLoadingFavourite ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                    title="Yêu thích"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                  </button>
+                )}
+                {!isBlacklisted && (
+                  <button
+                    onClick={handleToggleBlacklist}
+                    disabled={isLoadingBlacklist}
+                    className={`p-2 rounded-full transition-colors bg-gray-100 text-gray-400 hover:bg-gray-200 ${
+                      isLoadingBlacklist ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                    title="Cấm"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                )}
               </div>
             )}
             
@@ -524,10 +592,8 @@ const CommentsTab: React.FC<CommentsTabProps> = ({ restaurant, lastFilterKeyword
           </div>
           
           {/* Hiển thị đánh giá của bản thân */}
-          {restaurant.myReview && (() => {
-            console.log('My review data:', restaurant.myReview);
-            return (
-      <div className="p-3 bg-white rounded-lg border border-gray-200">
+          {restaurant.myReview && (
+            <div className="p-3 bg-white rounded-lg border border-gray-200">
               <div className="font-medium text-gray-800 mb-2 text-[14px]">Đánh giá của bạn</div>
               <div className="text-sm text-gray-600">
                 <div className="mb-1">
@@ -536,20 +602,14 @@ const CommentsTab: React.FC<CommentsTabProps> = ({ restaurant, lastFilterKeyword
                 {restaurant.myReview.content && (
                   <div className="mb-1">
                     <span className="font-medium">Nội dung:</span> {restaurant.myReview.content}
-      </div>
-                )}
-                {restaurant.myReview.images && (
-                  <div className="mb-1">
-                    <span className="font-medium">Hình ảnh:</span> {restaurant.myReview.images}
-      </div>
+                  </div>
                 )}
                 <div className="text-xs text-gray-500">
                   <span className="font-medium">Điểm review:</span> {restaurant.myReview.reviewScore}
-        </div>
-      </div>
+                </div>
+              </div>
             </div>
-            );
-          })()}
+          )}
           
           {/* Hiển thị thống kê đánh giá */}
           {restaurant.totalReviews !== undefined && restaurant.totalReviews > 0 && (
@@ -564,22 +624,19 @@ const CommentsTab: React.FC<CommentsTabProps> = ({ restaurant, lastFilterKeyword
           )}
           
           {/* Hiển thị tất cả review */}
-          {restaurant.reviews && restaurant.reviews.length > 0 && (() => {
-            console.log('Restaurant reviews:', restaurant.reviews);
-            return (
+          {restaurant.reviews && restaurant.reviews.length > 0 && (
             <div className="p-3 bg-white rounded-lg border border-gray-200">
               <div className="font-medium text-gray-800 mb-2 text-[14px]">Tất cả đánh giá</div>
-              <div className="space-y-3 max-h-[400px] overflow-y-auto">
+              <div className="space-y-3 max-h-[400px] overflow-y-auto scrollbar-hide">
                 {restaurant.reviews.map(review => (
                   <ReviewItem key={review.id} review={review} />
                 ))}
               </div>
             </div>
-            );
-          })()}
+          )}
           
-          {/* Form viết đánh giá - chỉ hiển thị nếu chưa có review và đã đăng nhập */}
-          {!restaurant.myReview && (
+          {/* Form viết đánh giá - chỉ hiển thị nếu chưa có review, đã đăng nhập và không phải chủ quán */}
+          {!restaurant.myReview && !(user && restaurant.ownerId && user.id === restaurant.ownerId) && (
             <div className="p-3 bg-white rounded-lg border border-gray-200">
               {!user ? (
                 <div className="text-center py-4">
@@ -628,42 +685,6 @@ const CommentsTab: React.FC<CommentsTabProps> = ({ restaurant, lastFilterKeyword
                 />
               </div>
               
-              {/* Image upload */}
-              <div className="mb-3">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Hình ảnh (tùy chọn, tối đa 1 ảnh)</label>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageSelect}
-                  className="hidden"
-                />
-                {reviewImagePreview ? (
-                  <div className="relative inline-block">
-                    <img
-                      src={reviewImagePreview}
-                      alt="Preview"
-                      className="w-32 h-32 object-cover rounded-lg border border-gray-300"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleRemoveImage}
-                      className="absolute top-0 right-0 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600"
-                    >
-                      ×
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    Chọn ảnh
-                  </button>
-                )}
-              </div>
-              
               {/* Submit button */}
               <div className="flex justify-end">
                 <button
@@ -687,9 +708,17 @@ const CommentsTab: React.FC<CommentsTabProps> = ({ restaurant, lastFilterKeyword
           <div className="text-gray-500 text-[14px]">Hãy chọn một marker trên bản đồ để xem chi tiết.</div>
         </div>
       )}
+      
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        title={alertModal.title}
+        message={alertModal.message}
+        type={alertModal.type}
+        onClose={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };
 
-export default CommentsTab;
+export default RestaurantTab;
 

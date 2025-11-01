@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { updateRestaurant, getRestaurantById } from '../services/restaurant';
 import { listAmenities } from '../services/amenity';
 import { listDishes } from '../services/dish';
@@ -177,9 +178,9 @@ const RestaurantEditModal: React.FC<RestaurantEditModalProps> = ({ restaurant, o
 
   if (!restaurant) return null;
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+  const modalContent = (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
+      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto scrollbar-hide">
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
           <h2 className="text-2xl font-bold text-gray-800">Chỉnh sửa quán ăn</h2>
           <button
@@ -337,7 +338,7 @@ const RestaurantEditModal: React.FC<RestaurantEditModalProps> = ({ restaurant, o
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Tiện ích
             </label>
-            <div className="max-h-40 overflow-y-auto border border-gray-300 rounded-lg p-2">
+            <div className="max-h-40 overflow-y-auto scrollbar-hide border border-gray-300 rounded-lg p-2">
               {availableAmenities.map((amenity) => (
                 <label key={amenity.id} className="flex items-center gap-2 py-1 cursor-pointer">
                   <input
@@ -357,7 +358,7 @@ const RestaurantEditModal: React.FC<RestaurantEditModalProps> = ({ restaurant, o
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Món ăn
             </label>
-            <div className="max-h-40 overflow-y-auto border border-gray-300 rounded-lg p-2">
+            <div className="max-h-40 overflow-y-auto scrollbar-hide border border-gray-300 rounded-lg p-2">
               {availableDishes.map((dish) => (
                 <label key={dish.id} className="flex items-center gap-2 py-1 cursor-pointer">
                   <input
@@ -396,6 +397,8 @@ const RestaurantEditModal: React.FC<RestaurantEditModalProps> = ({ restaurant, o
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 };
 
 export default RestaurantEditModal;

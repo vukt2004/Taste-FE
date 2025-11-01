@@ -4,9 +4,6 @@ import AuthCallbackPage from './pages/AuthCallbackPage';
 import Sidebar from './components/Sidebar';
 import MapPage from './pages/MapPage';
 import AdminDashboardPage from './pages/admin/DashboardPage';
-import AdminContributionsPage from './pages/admin/ContributionsPage';
-import AdminOwnershipRequestsPage from './pages/admin/OwnershipRequestsPage';
-import AdminNavbar from './components/AdminNavbar';
 import './App.css';
 import L from 'leaflet';
 import { type User } from './services/userService';
@@ -98,12 +95,17 @@ function App() {
   const [dishes, setDishes] = useState<Array<{ id: string; name: string }>>([]);
   const [dishTypes, setDishTypes] = useState<Array<{ id: string; typeName: string }>>([]);
 
-  const handleMapLoad = useCallback((mapInstance: L.Map) => {
-    setMap(mapInstance);
-    
-    // Lấy center ban đầu
-    const center = mapInstance.getCenter();
-    setMapCenter({ lat: center.lat, lng: center.lng });
+  const handleMapLoad = useCallback((mapInstance: L.Map | undefined) => {
+    if (mapInstance) {
+      setMap(mapInstance);
+      
+      // Lấy center ban đầu
+      const center = mapInstance.getCenter();
+      setMapCenter({ lat: center.lat, lng: center.lng });
+    } else {
+      // For non-Leaflet maps (like Google Maps Static), set default center
+      setMapCenter({ lat: 10.8231, lng: 106.6297 }); // Default to Ho Chi Minh City
+    }
   }, []);
 
   // Load global data on mount
@@ -135,13 +137,13 @@ function App() {
     loadGlobalData();
   }, []);
 
-  // Setup event listener cho map moveend
+  // Setup event listener cho map moveend để cập nhật state (việc lưu localStorage được xử lý trong MapCenterTracker)
   useEffect(() => {
     if (!map) return;
     
     const handleMoveEnd = () => {
-      const newCenter = map.getCenter();
-      setMapCenter({ lat: newCenter.lat, lng: newCenter.lng });
+      const center = map.getCenter();
+      setMapCenter({ lat: center.lat, lng: center.lng });
     };
     
     map.on('moveend', handleMoveEnd);
@@ -180,6 +182,22 @@ function App() {
       map.flyTo([lat, lng], 15, {
         duration: 1.5
       });
+      
+      // Lưu vị trí mới sau khi navigate (sau khi flyTo hoàn thành)
+      setTimeout(() => {
+        const center = map.getCenter();
+        const zoom = map.getZoom();
+        localStorage.setItem('map_center', JSON.stringify([center.lat, center.lng]));
+        localStorage.setItem('map_zoom', zoom.toString());
+        console.log('🗺️ [App.tsx] Đã lưu vị trí sau khi navigate đến restaurant:', { lat: center.lat, lng: center.lng, zoom });
+        setMapCenter({ lat: center.lat, lng: center.lng });
+      }, 1600); // Sau khi flyTo hoàn thành (1.5s + buffer)
+    } else {
+      // Nếu không có map instance, vẫn lưu vị trí restaurant
+      localStorage.setItem('map_center', JSON.stringify([lat, lng]));
+      localStorage.setItem('map_zoom', '15');
+      console.log('🗺️ [App.tsx] Đã lưu vị trí restaurant (không có map instance):', { lat, lng, zoom: 15 });
+      setMapCenter({ lat, lng });
     }
   };
 
@@ -264,11 +282,14 @@ function App() {
     if (restaurant) {
       try {
         // Fetch full restaurant details
-        const response = await getRestaurantById(restaurant.id);
-        console.log('API Response:', response);
+        const restaurantDetails = await getRestaurantById(restaurant.id);
         
-        if (response.isSuccess && response.data) {
-          setSelectedRestaurant(response.data);
+        // getRestaurantById returns response.data || response directly
+        if (restaurantDetails) {
+          setSelectedRestaurant(restaurantDetails);
+        } else {
+          // Fallback to basic info if no data returned
+          setSelectedRestaurant(restaurant);
         }
       } catch (error) {
         console.error('Error fetching restaurant details:', error);
@@ -286,6 +307,7 @@ function App() {
       lng: r.longitude!,
       title: r.restaurantName,
       type: 'normal' as const,
+      restaurantId: r.id,
     }));
 
   const favouriteMarkers = showFavourites 
@@ -296,6 +318,7 @@ function App() {
           lng: r.longitude!,
           title: r.restaurantName,
           type: 'favourite' as const,
+          restaurantId: r.id,
         }))
     : [];
 
@@ -307,6 +330,7 @@ function App() {
           lng: r.longitude!,
           title: r.restaurantName,
           type: 'blacklist' as const,
+          restaurantId: r.id,
         }))
     : [];
 
@@ -368,30 +392,15 @@ function App() {
         />
         <Route 
           path="/admin" 
-          element={
-            <>
-              <AdminNavbar />
-              <AdminContributionsPage />
-            </>
-          } 
+          element={<AdminDashboardPage />} 
         />
         <Route 
           path="/admin/contributions" 
-          element={
-            <>
-              <AdminNavbar />
-              <AdminContributionsPage />
-            </>
-          } 
+          element={<AdminDashboardPage initialTab="contributions" />} 
         />
         <Route 
           path="/admin/ownership-requests" 
-          element={
-            <>
-              <AdminNavbar />
-              <AdminOwnershipRequestsPage />
-            </>
-          } 
+          element={<AdminDashboardPage initialTab="ownership" />} 
         />
         <Route 
           path="/admin/tools" 

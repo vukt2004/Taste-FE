@@ -1,187 +1,277 @@
-import React from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import React, { useEffect, useRef, useState } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 
-// Fix cho default markers của Leaflet
-delete (L.Icon.Default.prototype as unknown as { _getIconUrl: unknown })._getIconUrl;
+// Fix cho default marker icons trong Leaflet
+delete (L.Icon.Default.prototype as { _getIconUrl?: unknown })._getIconUrl;
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
 interface OpenStreetMapProps {
-  onMapLoad?: (map: L.Map) => void;
+  onMapLoad?: (map: L.Map | undefined) => void;
   className?: string;
-  markers?: { lat: number; lng: number; title?: string; description?: string; type?: 'normal' | 'favourite' | 'blacklist' }[];
+  markers?: { lat: number; lng: number; title?: string; description?: string; type?: 'normal' | 'favourite' | 'blacklist'; restaurantId?: string }[];
   showCenterMarker?: boolean;
-  onMarkerClick?: (lat: number, lng: number, title?: string) => void;
+  onMarkerClick?: (lat: number, lng: number, title?: string, restaurantId?: string) => void;
 }
 
-// Component con để lấy map instance và gọi onMapLoad
-const MapInstanceHandler: React.FC<{ onMapLoad?: (map: L.Map) => void; showCenterMarker?: boolean }> = ({ onMapLoad, showCenterMarker }) => {
-  const map = useMap();
+interface MapState {
+  center: [number, number];
+  zoom: number;
+}
 
-  React.useEffect(() => {
-    if (map && onMapLoad) {
+// Component để cập nhật vị trí map khi có vị trí đã lưu
+const MapPositionUpdater: React.FC<{ center?: [number, number]; zoom?: number }> = ({ center, zoom }) => {
+  const map = useMap();
+  const hasUpdated = useRef(false);
+  
+  useEffect(() => {
+    if (center && zoom && !hasUpdated.current) {
+      // Kiểm tra xem vị trí hiện tại có khác với vị trí đã lưu không
+      const currentCenter = map.getCenter();
+      const currentZoom = map.getZoom();
+      const distance = map.distance(currentCenter, L.latLng(center[0], center[1]));
+      
+      // Nếu vị trí khác đáng kể (hơn 100m) hoặc zoom khác, cập nhật
+      if (distance > 100 || Math.abs(currentZoom - zoom) > 0) {
+        map.setView(center, zoom, { animate: false });
+        hasUpdated.current = true;
+      }
+    }
+  }, [map, center, zoom]);
+  
+  return null;
+};
+
+// Component để theo dõi map center changes
+const MapCenterTracker: React.FC<{ onMapLoad?: (map: L.Map) => void; onInitialPositionLoaded?: () => void }> = ({ onMapLoad, onInitialPositionLoaded }) => {
+  const map = useMap();
+  const shouldSavePosition = useRef(false);
+  
+  useEffect(() => {
+    if (onMapLoad) {
       onMapLoad(map);
     }
-  }, [map, onMapLoad]);
-
-  // Load saved map position from localStorage
-  React.useEffect(() => {
-    if (map) {
-      const savedCenter = localStorage.getItem('map_center');
-      const savedZoom = localStorage.getItem('map_zoom');
+    
+    // Đợi một chút để đảm bảo vị trí đã lưu được tải trước
+    const setupTimer = setTimeout(() => {
+      shouldSavePosition.current = true;
+      if (onInitialPositionLoaded) {
+        onInitialPositionLoaded();
+      }
+    }, 500);
+    
+    // Save map position to localStorage when map moves or zooms
+    const saveMapPosition = () => {
+      if (!shouldSavePosition.current) {
+        return;
+      }
       
-      if (savedCenter) {
-        try {
-          const [lat, lng] = JSON.parse(savedCenter);
-          map.setView([lat, lng], savedZoom ? parseInt(savedZoom) : map.getZoom());
-        } catch (e) {
-          console.error('Failed to load saved map position:', e);
-        }
+      const center = map.getCenter();
+      const zoom = map.getZoom();
+      
+      // Kiểm tra xem vị trí có hợp lệ không
+      if (!center || !isFinite(center.lat) || !isFinite(center.lng)) {
+        return;
+      }
+      
+      localStorage.setItem('map_center', JSON.stringify([center.lat, center.lng]));
+      localStorage.setItem('map_zoom', zoom.toString());
+    };
+    
+    const handleMoveEnd = () => {
+      saveMapPosition();
+    };
+    
+    const handleZoomEnd = () => {
+      saveMapPosition();
+    };
+    
+    map.on('moveend', handleMoveEnd);
+    map.on('zoomend', handleZoomEnd);
+    
+    return () => {
+      clearTimeout(setupTimer);
+      map.off('moveend', handleMoveEnd);
+      map.off('zoomend', handleZoomEnd);
+    };
+  }, [map, onMapLoad, onInitialPositionLoaded]);
+  
+  return null;
+};
+
+// Component để xử lý click events trên map
+const MapClickHandler: React.FC<{ 
+  showCenterMarker: boolean; 
+  onMarkerClick?: (lat: number, lng: number, title?: string) => void 
+}> = ({ showCenterMarker, onMarkerClick }) => {
+  useMapEvents({
+    click: (e) => {
+      if (showCenterMarker && onMarkerClick) {
+        onMarkerClick(e.latlng.lat, e.latlng.lng);
       }
     }
-  }, [map]);
-
-  // Save map position when it changes
-  React.useEffect(() => {
-    if (map) {
-      const savePosition = () => {
-        const center = map.getCenter();
-        const zoom = map.getZoom();
-        localStorage.setItem('map_center', JSON.stringify([center.lat, center.lng]));
-        localStorage.setItem('map_zoom', zoom.toString());
-      };
-
-      map.on('moveend', savePosition);
-      map.on('zoomend', savePosition);
-
-      return () => {
-        map.off('moveend', savePosition);
-        map.off('zoomend', savePosition);
-      };
-    }
-  }, [map]);
-
-  // Zoom to nhất và khóa bản đồ khi showCenterMarker = true
-  React.useEffect(() => {
-    if (map && showCenterMarker) {
-      // Zoom to nhất (level 18)
-      map.setZoom(18);
-      
-      // Disable zoom controls (nhưng vẫn cho phép drag)
-      map.touchZoom.disable();
-      map.doubleClickZoom.disable();
-      map.scrollWheelZoom.disable();
-      map.boxZoom.disable();
-      map.keyboard.disable();
-      
-      // Disable zoom buttons
-      if (map.zoomControl) {
-        map.removeControl(map.zoomControl);
-      }
-    } else if (map && !showCenterMarker) {
-      // Enable lại các controls khi không ở chế độ chọn vị trí
-      map.dragging.enable();
-      map.touchZoom.enable();
-      map.doubleClickZoom.enable();
-      map.scrollWheelZoom.enable();
-      map.boxZoom.enable();
-      map.keyboard.enable();
-    }
-  }, [map, showCenterMarker]);
-
+  });
+  
   return null;
 };
 
 // Component để hiển thị marker ở giữa màn hình
 const CenterMarker: React.FC = () => {
+  const map = useMap();
+  const [position, setPosition] = useState<L.LatLng>(map.getCenter());
+  
+  useEffect(() => {
+    const updatePosition = () => {
+      setPosition(map.getCenter());
+    };
+    
+    map.on('move', updatePosition);
+    map.on('zoom', updatePosition);
+    
+    return () => {
+      map.off('move', updatePosition);
+      map.off('zoom', updatePosition);
+    };
+  }, [map]);
+  
   return (
-    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none">
-      <svg 
-        width="50" 
-        height="50" 
-        viewBox="0 0 24 24" 
-        fill="none" 
-        xmlns="http://www.w3.org/2000/svg"
-        className="drop-shadow-lg"
-      >
-        {/* Location pin - giọt nước ngược */}
-        <path 
-          d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2Z" 
-          fill="#3B82F6" 
-          stroke="white" 
-          strokeWidth="1.5"
-        />
-        {/* Inner circle */}
-        <circle cx="12" cy="9" r="3" fill="white" />
-      </svg>
-    </div>
+    <Marker 
+      position={position} 
+      icon={L.icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+        iconSize: [35, 55],
+        iconAnchor: [17, 55],
+        popupAnchor: [0, -55],
+        shadowSize: [41, 41]
+      })}
+      interactive={false}
+    />
   );
 };
 
-const OpenStreetMap: React.FC<OpenStreetMapProps> = ({ onMapLoad, className = '', markers = [], showCenterMarker = false, onMarkerClick }) => {
-  // Tọa độ Hồ Chí Minh
-  const center: [number, number] = [10.8231, 106.6297];
-  const zoom = 13;
+const OpenStreetMap: React.FC<OpenStreetMapProps> = ({ 
+  onMapLoad, 
+  className = '', 
+  markers = [], 
+  showCenterMarker = false, 
+  onMarkerClick 
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [mapState, setMapState] = useState<MapState>({
+    center: [10.8231, 106.6297],
+    zoom: 13
+  });
+
+  const hasLoadedInitialPosition = useRef(false);
+  
+  // Load saved map position from localStorage
+  useEffect(() => {
+    const savedCenter = localStorage.getItem('map_center');
+    const savedZoom = localStorage.getItem('map_zoom');
+    
+    if (savedCenter) {
+      try {
+        const [lat, lng] = JSON.parse(savedCenter);
+        const zoom = savedZoom ? parseInt(savedZoom) : 13;
+        
+        // Validate coordinates
+        if (!isFinite(lat) || !isFinite(lng) || !isFinite(zoom)) {
+          hasLoadedInitialPosition.current = true;
+          return;
+        }
+        
+        setMapState({
+          center: [lat, lng],
+          zoom: zoom
+        });
+        hasLoadedInitialPosition.current = true;
+      } catch {
+        hasLoadedInitialPosition.current = true;
+      }
+    } else {
+      hasLoadedInitialPosition.current = true;
+    }
+  }, []);
+
+  // Tính zoom level dựa trên showCenterMarker
+  const mapZoom = showCenterMarker ? 18 : mapState.zoom;
+
+  // Tạo custom icon dựa trên type
+  const createCustomIcon = (type?: 'normal' | 'favourite' | 'blacklist') => {
+    let iconColor = 'red';
+    if (type === 'favourite') iconColor = 'gold';
+    if (type === 'blacklist') iconColor = 'black';
+    
+    return L.icon({
+      iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${iconColor}.png`,
+      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+      iconSize: [35, 55],
+      iconAnchor: [17, 55],
+      popupAnchor: [0, -55],
+      shadowSize: [41, 41]
+    });
+  };
 
   return (
-    <div className={`w-full h-full ${className}`} style={{ minHeight: '100vh', position: 'relative', zIndex: 1 }}>
+    <div 
+      ref={containerRef}
+      className={`w-full h-full ${className}`}
+      style={{ minHeight: '100vh', position: 'relative', zIndex: 1 }}
+    >
       <MapContainer
-        center={center}
-        zoom={zoom}
-        style={{ height: '100vh', width: '100vw' }}
+        center={mapState.center}
+        zoom={mapZoom}
+        style={{ height: '100%', width: '100%', cursor: showCenterMarker ? 'crosshair' : 'default' }}
+        scrollWheelZoom={true}
+        zoomControl={true}
       >
-        <MapInstanceHandler onMapLoad={onMapLoad} showCenterMarker={showCenterMarker} />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        {/* Dynamic markers */}
-        {markers.map((m, idx) => {
-          // Create custom icon based on type
-          let iconColor = '#EF4444'; // red for normal
-          if (m.type === 'favourite') iconColor = '#FBBF24'; // yellow
-          if (m.type === 'blacklist') iconColor = '#000000'; // black
-          
-          const customIcon = L.divIcon({
-            className: 'custom-marker',
-            html: `<div style="background-color: ${iconColor}; width: 30px; height: 30px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>`,
-            iconSize: [30, 30],
-            iconAnchor: [15, 30],
-          });
-          
-          return (
-            <Marker 
-              key={`${m.lat}-${m.lng}-${idx}`} 
-              position={[m.lat, m.lng] as [number, number]}
-              icon={customIcon}
-              eventHandlers={{
-                click: () => {
-                  if (onMarkerClick) {
-                    onMarkerClick(m.lat, m.lng, m.title);
-                  }
+        
+        {/* Component để cập nhật vị trí map khi có vị trí đã lưu */}
+        <MapPositionUpdater center={mapState.center} zoom={mapState.zoom} />
+        
+        <MapCenterTracker onMapLoad={onMapLoad} />
+        <MapClickHandler showCenterMarker={showCenterMarker} onMarkerClick={onMarkerClick} />
+        
+        {/* Render markers */}
+        {markers.map((marker, index) => (
+          <Marker
+            key={index}
+            position={[marker.lat, marker.lng]}
+            icon={createCustomIcon(marker.type)}
+            eventHandlers={{
+              click: () => {
+                if (onMarkerClick && !showCenterMarker) {
+                  onMarkerClick(marker.lat, marker.lng, marker.title, marker.restaurantId);
                 }
-              }}
-            >
-              {(m.title || m.description) && (
-                <Popup>
-                  <div className="text-center">
-                    {m.title && <h3 className="font-bold text-lg">{m.title}</h3>}
-                    {m.description && <p className="text-sm text-gray-600">{m.description}</p>}
-                  </div>
-                </Popup>
-              )}
-            </Marker>
-          );
-        })}
+              }
+            }}
+          >
+            {(marker.title || marker.description) && (
+              <Popup>
+                <div>
+                  {marker.title && <div className="font-bold text-sm">{marker.title}</div>}
+                  {marker.description && <div className="text-xs text-gray-600">{marker.description}</div>}
+                </div>
+              </Popup>
+            )}
+          </Marker>
+        ))}
+        
+        {/* Show center marker if needed */}
+        {showCenterMarker && <CenterMarker />}
       </MapContainer>
-      {showCenterMarker && <CenterMarker />}
     </div>
   );
 };
 
 export default OpenStreetMap;
+

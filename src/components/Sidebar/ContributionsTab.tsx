@@ -1,11 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BACKEND_URL, API_ENDPOINTS } from '../../config/backend';
 import { listDishes } from '../../services/dish';
 import { listAmenities } from '../../services/amenity';
-import { listDishTypes } from '../../services/dishType';
 import { UserService } from '../../services/userService';
 import { createRestaurantOwnershipRequest } from '../../services/restaurantOwnership';
 import { uploadReviewImages } from '../../services/review';
+import { createQRPayment, type QRPaymentResponse } from '../../services/payment';
+import ContributionButtons from './contribution/ContributionButtons';
+import ContributionModal from './contribution/ContributionModal';
+import DishContributionForm from './contribution/DishContributionForm';
+import RestaurantContributionForm from './contribution/RestaurantContributionForm';
+import ClaimRestaurantForm from './contribution/ClaimRestaurantForm';
+import AlertModal from './contribution/AlertModal';
 
 type ContributionType = 'dish' | 'restaurant';
 
@@ -19,10 +25,10 @@ interface Dish {
   name: string;
 }
 
-interface DishType {
-  id: string;
-  typeName: string;
-}
+// interface DishType {
+//   id: string;
+//   typeName: string;
+// }
 
 interface ContributionsTabProps {
   mapCenter?: { lat: number; lng: number };
@@ -41,10 +47,10 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   
   // Dish form states
-  const [dishName, setDishName] = useState('');
-  const [dishTypes, setDishTypes] = useState<DishType[]>([]);
+  const [dishNames, setDishNames] = useState<string[]>([]);
+  // const [dishTypes, setDishTypes] = useState<DishType[]>([]);
   const [selectedDishTypeIds, setSelectedDishTypeIds] = useState<string[]>([]);
-  const [dishTypeSearchTerm, setDishTypeSearchTerm] = useState('');
+  // const [dishTypeSearchTerm, setDishTypeSearchTerm] = useState('');
   
   // Restaurant form states
   const [restaurantName, setRestaurantName] = useState('');
@@ -74,7 +80,21 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
   const [claimProofImages, setClaimProofImages] = useState<File[]>([]);
   const [claimImagePreviews, setClaimImagePreviews] = useState<string[]>([]);
   const [isSubmittingClaim, setIsSubmittingClaim] = useState(false);
-  const claimFileInputRef = useRef<HTMLInputElement>(null);
+  const [qrPaymentData, setQrPaymentData] = useState<QRPaymentResponse | null>(null);
+  const [showQRPayment, setShowQRPayment] = useState(false);
+  
+  // Alert modal state
+  const [alertModal, setAlertModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'success' | 'error' | 'info';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info',
+  });
 
   const openModal = (type: ContributionType) => {
     setContributionType(type);
@@ -105,9 +125,9 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
     setShowModal(false);
     setContributionType(null);
     // Reset form states
-    setDishName('');
+    setDishNames([]);
     setSelectedDishTypeIds([]);
-    setDishTypeSearchTerm('');
+    // setDishTypeSearchTerm('');
     setRestaurantName('');
     setRestaurantDescription('');
     setSelectedLocation(null);
@@ -138,18 +158,18 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
   }, []);
 
   // Fetch dish types on component mount
-  useEffect(() => {
-    const fetchDishTypes = async () => {
-      try {
-        const res = await listDishTypes();
-        const data = res?.data ?? res ?? [];
-        setDishTypes(data);
-      } catch {
-        // Silently handle error
-      }
-    };
-    fetchDishTypes();
-  }, []);
+  // useEffect(() => {
+  //   const fetchDishTypes = async () => {
+  //     try {
+  //       const res = await listDishTypes();
+  //       const data = res?.data ?? res ?? [];
+  //       setDishTypes(data);
+  //     } catch {
+  //       // Silently handle error
+  //     }
+  //   };
+  //   fetchDishTypes();
+  // }, []);
 
   // Fetch dishes on component mount (for restaurant form only)
   useEffect(() => {
@@ -166,18 +186,23 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
   }, []);
 
   const handleSubmitDish = async () => {
+    if (dishNames.length === 0) {
+      setSubmitError('Vui lòng thêm ít nhất một món ăn');
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmitError(null);
     setSubmitSuccess(null);
 
     try {
-      const token = localStorage.getItem('auth_token');
-      const response = await fetch(`${BACKEND_URL}${API_ENDPOINTS.DISH_CONTRIBUTION.CREATE}`, {
+      // Gửi từng món ăn một
+      const results = [];
+      for (const dishName of dishNames) {
+    try {
+      const response = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.DISH_CONTRIBUTION.CREATE}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-        },
+        headers: UserService.getAuthHeaders(),
         body: JSON.stringify({
           name: dishName,
           typeIds: selectedDishTypeIds
@@ -185,14 +210,23 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
       });
 
       const data = await response.json();
+          results.push({ name: dishName, success: response.ok && data.success, message: data.message });
+        } catch {
+          results.push({ name: dishName, success: false, message: 'Lỗi kết nối' });
+        }
+      }
 
-      if (response.ok && data.success) {
-        setSubmitSuccess('Đã gửi yêu cầu đóng góp món ăn thành công!');
-        setTimeout(() => {
-          closeModal();
-        }, 2000);
+      // Kiểm tra kết quả
+      const successCount = results.filter(r => r.success).length;
+      const failedCount = results.length - successCount;
+
+      if (failedCount === 0) {
+        setSubmitSuccess(`Đã gửi thành công ${successCount} món ăn!`);
+        setDishNames([]); // Xóa danh sách sau khi gửi thành công
+      } else if (successCount > 0) {
+        setSubmitError(`Gửi thành công ${successCount}/${results.length} món ăn. Có ${failedCount} món thất bại.`);
       } else {
-        setSubmitError(data.message || 'Gửi yêu cầu thất bại');
+        setSubmitError('Gửi yêu cầu thất bại. Vui lòng thử lại.');
       }
     } catch {
       setSubmitError('Lỗi kết nối. Vui lòng thử lại.');
@@ -218,12 +252,25 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
 
       const token = localStorage.getItem('auth_token');
       
+      // Validate coordinates
+      if (selectedLocation?.lat && (selectedLocation.lat < -90 || selectedLocation.lat > 90)) {
+        setSubmitError(`Tọa độ không hợp lệ: Vĩ độ phải trong khoảng -90 đến 90 (nhận được: ${selectedLocation.lat})`);
+        setIsSubmitting(false);
+        return;
+      }
+      if (selectedLocation?.lng && (selectedLocation.lng < -180 || selectedLocation.lng > 180)) {
+        setSubmitError(`Tọa độ không hợp lệ: Kinh độ phải trong khoảng -180 đến 180 (nhận được: ${selectedLocation.lng})`);
+        setIsSubmitting(false);
+        return;
+      }
+      
       // Prepare FormData
       const formData = new FormData();
       formData.append('restaurantName', restaurantName);
       if (restaurantDescription) formData.append('description', restaurantDescription);
-      if (selectedLocation?.lat) formData.append('latitude', selectedLocation.lat.toString());
-      if (selectedLocation?.lng) formData.append('longitude', selectedLocation.lng.toString());
+      // Format coordinates with fixed decimal places and use dot separator (not comma)
+      if (selectedLocation?.lat) formData.append('latitude', selectedLocation.lat.toFixed(8));
+      if (selectedLocation?.lng) formData.append('longitude', selectedLocation.lng.toFixed(8));
       if (priceRange) formData.append('priceRange', priceRange);
       if (formattedHours) formData.append('operatingHours', formattedHours);
       if (story) formData.append('story', story);
@@ -249,9 +296,6 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
 
       if (response.ok && (data.isSuccess || data.success)) {
         setSubmitSuccess('Đã gửi yêu cầu đóng góp quán ăn thành công!');
-        setTimeout(() => {
-          closeModal();
-        }, 2000);
       } else {
         if (response.status === 401) {
           setSubmitError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
@@ -266,21 +310,8 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
     }
   };
 
-  // Generate time slots (7:00, 7:30, 8:00, etc.)
-  const generateTimeSlots = () => {
-    const slots = [];
-    for (let hour = 0; hour < 24; hour++) {
-      slots.push(`${hour.toString().padStart(2, '0')}:00`);
-      slots.push(`${hour.toString().padStart(2, '0')}:30`);
-    }
-    return slots;
-  };
 
-  const timeSlots = generateTimeSlots();
-
-  const handleClaimImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length > 0) {
+  const handleClaimImageSelect = (files: File[]) => {
       setClaimProofImages(files);
       const newPreviews: string[] = [];
       files.forEach(file => {
@@ -293,7 +324,6 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
         };
         reader.readAsDataURL(file);
       });
-    }
   };
 
   const handleRemoveClaimImage = (index: number) => {
@@ -305,7 +335,12 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
     if (!selectedRestaurantForClaim || isSubmittingClaim) return;
     
     if (!claimBusinessRelationship.trim()) {
-      alert('Vui lòng điền mối quan hệ kinh doanh');
+      setAlertModal({
+        isOpen: true,
+        title: 'Lỗi',
+        message: 'Vui lòng điền mối quan hệ kinh doanh',
+        type: 'error',
+      });
       return;
     }
     
@@ -325,19 +360,31 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
         proofImages: proofImageUrls.length > 0 ? JSON.stringify(proofImageUrls) : undefined
       });
       
-      // Reset form
-      setShowClaimModal(false);
-      onRestaurantSelectedForClaim?.(null);
-      setClaimBusinessRelationship('');
-      setClaimAdditionalInfo('');
-      setClaimProofImages([]);
-      setClaimImagePreviews([]);
-      
-      alert('Yêu cầu claim quán ăn đã được gửi thành công! Đang chờ admin xét duyệt.');
+      // Tạo QR code để thanh toán 10k
+      try {
+        const qrData = await createQRPayment({
+          description: selectedRestaurantForClaim.id // Nội dung chuyển khoản là ID của quán ăn
+        });
+        setQrPaymentData(qrData);
+        setShowQRPayment(true);
+      } catch {
+        // Vẫn hiển thị thông báo thành công dù QR tạo thất bại
+        setAlertModal({
+          isOpen: true,
+          title: 'Thành công',
+          message: 'Yêu cầu xét duyệt chủ quán ăn đã được gửi thành công! Đang chờ admin xét duyệt.',
+          type: 'success',
+        });
+      }
     } catch (error) {
       console.error('Error submitting claim:', error);
       const errorMessage = error instanceof Error ? error.message : 'Có lỗi xảy ra khi gửi yêu cầu claim. Vui lòng thử lại.';
-      alert(errorMessage);
+      setAlertModal({
+        isOpen: true,
+        title: 'Lỗi',
+        message: errorMessage,
+        type: 'error',
+      });
     } finally {
       setIsSubmittingClaim(false);
     }
@@ -358,59 +405,15 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
           </button>
         </div>
       ) : !showModal && !showClaimModal ? (
-        <div className="space-y-2">
-          <button
-            onClick={() => openModal('dish')}
-            className="w-full p-2.5 sm:p-4 bg-white rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-colors text-left"
-          >
-            <div className="flex items-center space-x-2 sm:space-x-3">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-green-100 rounded-full flex items-center justify-center">
-                <span className="text-green-600 text-sm sm:text-lg"></span>
-              </div>
-              <div>
-                <div className="font-medium text-gray-800 text-sm sm:text-base">Đóng góp món ăn</div>
-                <div className="text-xs text-gray-500">Gửi đề xuất món ăn mới</div>
-              </div>
-            </div>
-          </button>
-
-          <button
-            onClick={() => openModal('restaurant')}
-            className="w-full p-2.5 sm:p-4 bg-white rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-colors text-left"
-          >
-            <div className="flex items-center space-x-2 sm:space-x-3">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                <span className="text-blue-600 text-sm sm:text-lg"></span>
-              </div>
-              <div>
-                <div className="font-medium text-gray-800 text-sm sm:text-base">Đóng góp quán ăn</div>
-                <div className="text-xs text-gray-500">Thêm quán ăn mới vào hệ thống</div>
-              </div>
-            </div>
-          </button>
-
-          <button
-            onClick={() => setShowClaimModal(true)}
-            className="w-full p-2.5 sm:p-4 bg-white rounded-lg border border-gray-200 hover:border-yellow-400 hover:bg-yellow-50 transition-colors text-left"
-          >
-            <div className="flex items-center space-x-2 sm:space-x-3">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-yellow-100 rounded-full flex items-center justify-center">
-                <span className="text-yellow-600 text-sm sm:text-lg"></span>
-              </div>
-              <div>
-                <div className="font-medium text-gray-800 text-sm sm:text-base">Xác nhận quán ăn</div>
-                <div className="text-xs text-gray-500">Yêu cầu làm chủ quán ăn</div>
-              </div>
-            </div>
-          </button>
-        </div>
+        <ContributionButtons
+          onOpenDishModal={() => openModal('dish')}
+          onOpenRestaurantModal={() => openModal('restaurant')}
+          onOpenClaimModal={() => setShowClaimModal(true)}
+        />
       ) : showClaimModal ? (
-        <div className="bg-white rounded-lg shadow-lg">
-          {/* Claim Modal Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-800">Xác nhận quán ăn</h2>
-            <button
-              onClick={() => {
+        <ContributionModal
+          title="Xác nhận quán ăn"
+          onClose={() => {
                 setShowClaimModal(false);
                 onRestaurantSelectedForClaim?.(null);
                 setClaimBusinessRelationship('');
@@ -418,476 +421,109 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
                 setClaimProofImages([]);
                 setClaimImagePreviews([]);
               }}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              ✕
-            </button>
-          </div>
-
-          {/* Claim Modal Body */}
-          <div className="p-4 max-h-[60vh] overflow-y-auto space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Chọn marker trên bản đồ để claim quán ăn
-              </label>
-              <div className="text-xs text-gray-500 bg-yellow-50 p-3 rounded-lg">
-                {selectedRestaurantForClaim 
-                  ? `Đã chọn: ${selectedRestaurantForClaim.name}`
-                  : 'Hãy click vào một marker trên bản đồ để chọn quán ăn vô chủ'}
-              </div>
-            </div>
-
-            {selectedRestaurantForClaim && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Mối quan hệ kinh doanh <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    value={claimBusinessRelationship}
-                    onChange={(e) => setClaimBusinessRelationship(e.target.value)}
-                    placeholder="Ví dụ: Tôi là chủ sở hữu của quán ăn này"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    rows={3}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Thông tin bổ sung
-                  </label>
-                  <textarea
-                    value={claimAdditionalInfo}
-                    onChange={(e) => setClaimAdditionalInfo(e.target.value)}
-                    placeholder="Ví dụ: Có giấy phép kinh doanh và hợp đồng thuê mặt bằng"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    rows={3}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Hình ảnh chứng minh
-                  </label>
-                  <input
-                    ref={claimFileInputRef}
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleClaimImageSelect}
-                    className="hidden"
-                  />
-                  <button
-                    onClick={() => claimFileInputRef.current?.click()}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
-                  >
-                    Chọn ảnh
-                  </button>
-                  
-                  {claimImagePreviews.length > 0 && (
-                    <div className="mt-2 grid grid-cols-3 gap-2">
-                      {claimImagePreviews.map((preview, index) => (
-                        <div key={index} className="relative">
-                          <img
-                            src={preview}
-                            alt={`Proof ${index + 1}`}
-                            className="w-full h-24 object-cover rounded-lg border border-gray-300"
-                          />
-                          <button
-                            onClick={() => handleRemoveClaimImage(index)}
-                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <button
-                  onClick={handleSubmitClaim}
-                  disabled={isSubmittingClaim}
-                  className={`w-full py-1.5 sm:py-2 px-3 sm:px-4 bg-yellow-500 text-white text-xs sm:text-sm rounded-lg hover:bg-yellow-600 transition-colors ${
-                    isSubmittingClaim ? 'opacity-50 cursor-not-allowed' : ''
-                  }`}
-                >
-                  {isSubmittingClaim ? 'Đang gửi...' : 'Gửi yêu cầu claim'}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+        >
+          <ClaimRestaurantForm
+            selectedRestaurantForClaim={selectedRestaurantForClaim ?? null}
+            claimBusinessRelationship={claimBusinessRelationship}
+            onClaimBusinessRelationshipChange={setClaimBusinessRelationship}
+            claimAdditionalInfo={claimAdditionalInfo}
+            onClaimAdditionalInfoChange={setClaimAdditionalInfo}
+            claimProofImages={claimProofImages}
+            claimImagePreviews={claimImagePreviews}
+            onClaimImageSelect={handleClaimImageSelect}
+            onRemoveClaimImage={handleRemoveClaimImage}
+            isSubmittingClaim={isSubmittingClaim}
+            onSubmit={handleSubmitClaim}
+            onCancel={() => {
+              setShowClaimModal(false);
+              onRestaurantSelectedForClaim?.(null);
+              setClaimBusinessRelationship('');
+              setClaimAdditionalInfo('');
+              setClaimProofImages([]);
+              setClaimImagePreviews([]);
+              setQrPaymentData(null);
+              setShowQRPayment(false);
+            }}
+            qrPaymentData={qrPaymentData}
+            showQRPayment={showQRPayment}
+            onConfirmPayment={() => {
+              setAlertModal({
+                isOpen: true,
+                title: 'Đã xác nhận',
+                message: 'Bạn đã xác nhận chuyển khoản. Yêu cầu của bạn sẽ được admin duyệt thủ công. Vui lòng đợi phản hồi.',
+                type: 'success',
+              });
+              // Đóng modal và reset form
+              setTimeout(() => {
+                setShowClaimModal(false);
+                onRestaurantSelectedForClaim?.(null);
+                setClaimBusinessRelationship('');
+                setClaimAdditionalInfo('');
+                setClaimProofImages([]);
+                setClaimImagePreviews([]);
+                setQrPaymentData(null);
+                setShowQRPayment(false);
+              }, 2000);
+            }}
+          />
+        </ContributionModal>
       ) : (
-        <div className="bg-white rounded-lg shadow-lg">
-          {/* Modal Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-800">
-              {contributionType === 'dish' ? 'Đóng góp món ăn' : 'Đóng góp quán ăn'}
-            </h2>
-            <button
-              onClick={closeModal}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              ✕
-            </button>
-          </div>
-
-          {/* Modal Body */}
-          <div className="p-4 max-h-[60vh] overflow-y-auto">
-              {(submitError || submitSuccess) && (
-                <div className={`mb-4 p-3 border rounded text-sm ${
-                  submitError 
-                    ? 'bg-red-100 border-red-400 text-red-700' 
-                    : 'bg-green-100 border-green-400 text-green-700'
-                }`}>
-                  {submitError || submitSuccess}
-                </div>
-              )}
-
+        <ContributionModal
+          title={contributionType === 'dish' ? 'Đóng góp món ăn' : 'Đóng góp quán ăn'}
+          onClose={closeModal}
+        >
               {contributionType === 'dish' ? (
-                <div className="space-y-4">
-                  {/* Tên món ăn */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Tên món ăn <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={dishName}
-                      onChange={(e) => setDishName(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Ví dụ: Phở Bò Đặc Biệt"
-                    />
-                  </div>
-
-                  {/* Loại món ăn */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Loại món ăn <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={dishTypeSearchTerm}
-                      onChange={(e) => setDishTypeSearchTerm(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2"
-                      placeholder="Tìm kiếm loại món ăn..."
-                    />
-                    <div className="max-h-48 overflow-y-auto border border-gray-300 rounded-md p-2 space-y-2">
-                      {dishTypes.length === 0 ? (
-                        <div className="text-xs text-gray-400 text-center py-2">Đang tải...</div>
-                      ) : (
-                        <>
-                          {dishTypes
-                            .filter(dishType => dishType.typeName.toLowerCase().includes(dishTypeSearchTerm.toLowerCase()))
-                            .map((dishType) => (
-                              <label key={dishType.id} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedDishTypeIds.includes(dishType.id)}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setSelectedDishTypeIds([...selectedDishTypeIds, dishType.id]);
-                                    } else {
-                                      setSelectedDishTypeIds(selectedDishTypeIds.filter(id => id !== dishType.id));
-                                    }
-                                  }}
-                                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                />
-                                <span className="text-sm text-gray-700">{dishType.typeName}</span>
-                              </label>
-                            ))}
-                        </>
-                      )}
-                      {dishTypes.length > 0 && dishTypes.filter(dt => dt.typeName.toLowerCase().includes(dishTypeSearchTerm.toLowerCase())).length === 0 && (
-                        <div className="text-xs text-gray-400 text-center py-2">Không tìm thấy</div>
-                      )}
-                    </div>
-                    {selectedDishTypeIds.length > 0 && (
-                      <div className="mt-2 text-xs text-gray-600">
-                        Đã chọn {selectedDishTypeIds.length} loại món ăn
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={closeModal}
-                      disabled={isSubmitting}
-                      className="flex-1 px-3 sm:px-4 py-1.5 sm:py-2 border border-gray-300 rounded-md text-gray-700 text-xs sm:text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Hủy
-                    </button>
-                    <button
-                      onClick={handleSubmitDish}
-                      disabled={!dishName.trim() || selectedDishTypeIds.length === 0 || isSubmitting}
-                      className="flex-1 px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white text-xs sm:text-sm rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {isSubmitting ? 'Đang gửi...' : 'Gửi yêu cầu'}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {/* 1. Tên quán ăn */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Tên quán ăn <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={restaurantName}
-                      onChange={(e) => setRestaurantName(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Ví dụ: quán ăn ABC"
-                      required
-                    />
-                  </div>
-
-                  {/* 2. Mô tả */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Mô tả
-                    </label>
-                    <textarea
-                      value={restaurantDescription}
-                      onChange={(e) => setRestaurantDescription(e.target.value)}
-                      rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Mô tả về quán ăn..."
-                    />
-                  </div>
-
-                  {/* 3. Câu chuyện quán ăn */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Câu chuyện quán ăn
-                    </label>
-                    <textarea
-                      value={story}
-                      onChange={(e) => setStory(e.target.value)}
-                      rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Câu chuyện về quán ăn..."
-                    />
-                  </div>
-
-                  {/* 4. Khoảng giá */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Khoảng giá
-                    </label>
-                    <input
-                      type="text"
-                      value={priceRange}
-                      onChange={(e) => setPriceRange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Ví dụ: 100000-300000"
-                    />
-                  </div>
-
-                  {/* 5. Tiện nghi */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Tiện nghi
-                    </label>
-                    <input
-                      type="text"
-                      value={amenitySearchTerm}
-                      onChange={(e) => setAmenitySearchTerm(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2"
-                      placeholder="Tìm kiếm tiện nghi..."
-                    />
-                    <div className="max-h-32 overflow-y-auto border border-gray-300 rounded-md p-2 space-y-2">
-                      {amenities.length === 0 ? (
-                        <div className="text-xs text-gray-400 text-center py-2">Đang tải...</div>
-                      ) : (
-                        <>
-                          {amenities
-                            .filter(amenity => amenity.name.toLowerCase().includes(amenitySearchTerm.toLowerCase()))
-                            .map((amenity) => (
-                              <label key={amenity.id} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedAmenityIds.includes(amenity.id)}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setSelectedAmenityIds([...selectedAmenityIds, amenity.id]);
-                                    } else {
-                                      setSelectedAmenityIds(selectedAmenityIds.filter(id => id !== amenity.id));
-                                    }
-                                  }}
-                                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                />
-                                <span className="text-sm text-gray-700">{amenity.name}</span>
-                              </label>
-                            ))}
-                        </>
-                      )}
-                      {amenities.length > 0 && amenities.filter(a => a.name.toLowerCase().includes(amenitySearchTerm.toLowerCase())).length === 0 && (
-                        <div className="text-xs text-gray-400 text-center py-2">Không tìm thấy</div>
-                      )}
-                    </div>
-                    {selectedAmenityIds.length > 0 && (
-                      <div className="mt-2 text-xs text-gray-600">
-                        Đã chọn {selectedAmenityIds.length} tiện nghi
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 6. Chọn món ăn */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Chọn món ăn
-                    </label>
-                    <input
-                      type="text"
-                      value={dishSearchTerm}
-                      onChange={(e) => setDishSearchTerm(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Tìm kiếm món ăn..."
-                    />
-                    <div className="max-h-40 overflow-y-auto border border-gray-300 rounded-md p-2 space-y-2 mt-2">
-                      {dishes.length === 0 ? (
-                        <div className="text-xs text-gray-400 text-center py-2">Đang tải...</div>
-                      ) : (
-                        dishes
-                          .filter(dish => dish.name.toLowerCase().includes(dishSearchTerm.toLowerCase()))
-                          .map((dish) => (
-                            <label key={dish.id} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
-                              <input
-                                type="checkbox"
-                                checked={selectedDishIds.includes(dish.id)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedDishIds([...selectedDishIds, dish.id]);
-                                  } else {
-                                    setSelectedDishIds(selectedDishIds.filter(id => id !== dish.id));
-                                  }
-                                }}
-                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                              />
-                              <span className="text-sm text-gray-700">{dish.name}</span>
-                            </label>
-                          ))
-                      )}
-                    </div>
-                    {selectedDishIds.length > 0 && (
-                      <div className="mt-2 text-xs text-gray-600">
-                        Đã chọn {selectedDishIds.length} món ăn
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 7. Giờ hoạt động */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Giờ hoạt động
-                    </label>
-                    <div className="flex items-center space-x-2">
-                      <select
-                        value={operatingHours.open}
-                        onChange={(e) => setOperatingHours({ ...operatingHours, open: e.target.value })}
-                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                      >
-                        <option value="">Chọn giờ mở</option>
-                        {timeSlots.map(time => (
-                          <option key={time} value={time}>{time}</option>
-                        ))}
-                      </select>
-                      <span className="text-gray-500">-</span>
-                      <select
-                        value={operatingHours.close}
-                        onChange={(e) => setOperatingHours({ ...operatingHours, close: e.target.value })}
-                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                      >
-                        <option value="">Chọn giờ đóng</option>
-                        {timeSlots.map(time => (
-                          <option key={time} value={time}>{time}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="mt-1 text-xs text-gray-500">
-                      Áp dụng cho tất cả các ngày trong tuần
-                    </div>
-                  </div>
-
-                  {/* 8. Hình ảnh */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Hình ảnh (tùy chọn)
-                    </label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={(e) => {
-                        if (e.target.files) {
-                          const newFiles = Array.from(e.target.files);
-                          setImages([...images, ...newFiles]);
-                        }
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    />
-                    {images.length > 0 && (
-                      <div className="mt-2 grid grid-cols-3 gap-2">
-                        {images.map((img, index) => (
-                          <div key={index} className="relative group">
-                            <img
-                              src={URL.createObjectURL(img)}
-                              alt={`Preview ${index + 1}`}
-                              className="w-auto max-h-[200px] object-contain rounded border border-gray-300"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setImages(images.filter((_, i) => i !== index))}
-                              className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Vị trí trên bản đồ - giữ nguyên ở cuối */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Vị trí trên bản đồ
-                    </label>
-                    <div className="text-xs text-gray-500 mb-2">
-                      Di chuyển bản đồ để chọn vị trí quán ăn
-                    </div>
-                    {selectedLocation && (
-                      <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
-                        Lat: {selectedLocation.lat.toFixed(6)}, Lng: {selectedLocation.lng.toFixed(6)}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Buttons */}
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={closeModal}
-                      disabled={isSubmitting}
-                      className="flex-1 px-3 sm:px-4 py-1.5 sm:py-2 border border-gray-300 rounded-md text-gray-700 text-xs sm:text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Hủy
-                    </button>
-                    <button
-                      onClick={handleSubmitRestaurant}
-                      disabled={!restaurantName.trim() || isSubmitting}
-                      className="flex-1 px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white text-xs sm:text-sm rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {isSubmitting ? 'Đang gửi...' : 'Gửi yêu cầu'}
-                    </button>
-                  </div>
-                </div>
-              )}
-          </div>
-        </div>
+            <DishContributionForm
+              dishNames={dishNames}
+              onDishNamesChange={setDishNames}
+              isSubmitting={isSubmitting}
+              onSubmit={handleSubmitDish}
+              onCancel={closeModal}
+              submitError={submitError}
+              submitSuccess={submitSuccess}
+            />
+          ) : (
+            <RestaurantContributionForm
+              restaurantName={restaurantName}
+              onRestaurantNameChange={setRestaurantName}
+              restaurantDescription={restaurantDescription}
+              onRestaurantDescriptionChange={setRestaurantDescription}
+              story={story}
+              onStoryChange={setStory}
+              priceRange={priceRange}
+              onPriceRangeChange={setPriceRange}
+              operatingHours={operatingHours}
+              onOperatingHoursChange={setOperatingHours}
+              selectedLocation={selectedLocation}
+              amenities={amenities}
+              selectedAmenityIds={selectedAmenityIds}
+              onSelectedAmenityIdsChange={setSelectedAmenityIds}
+              amenitySearchTerm={amenitySearchTerm}
+              onAmenitySearchTermChange={setAmenitySearchTerm}
+              dishes={dishes}
+              selectedDishIds={selectedDishIds}
+              onSelectedDishIdsChange={setSelectedDishIds}
+              dishSearchTerm={dishSearchTerm}
+              onDishSearchTermChange={setDishSearchTerm}
+              images={images}
+              onImagesChange={setImages}
+              isSubmitting={isSubmitting}
+              onSubmit={handleSubmitRestaurant}
+              onCancel={closeModal}
+              submitError={submitError}
+              submitSuccess={submitSuccess}
+            />
+          )}
+        </ContributionModal>
       )}
+      
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        title={alertModal.title}
+        message={alertModal.message}
+        type={alertModal.type}
+        onClose={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };

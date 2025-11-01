@@ -3,7 +3,7 @@ import { type User } from '../services/user';
 import { type RestaurantFilter } from '../services/restaurant';
 import SidebarHeader from './Sidebar/SidebarHeader';
 import ExploreTab from './Sidebar/ExploreTab';
-import CommentsTab from './Sidebar/CommentsTab';
+import RestaurantTab from './Sidebar/RestaurantTab';
 import ContributionsTab from './Sidebar/ContributionsTab';
 import UserTab from './Sidebar/UserTab';
 
@@ -54,7 +54,7 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ user, isOpen, onToggle, onFilterChange, mapCenter, onUserChange, onNavigateToRestaurant, onShowCenterMarkerChange, selectedRestaurant, lastFilterKeywords, selectedRestaurantForClaim, onRestaurantSelectedForClaim, onFavouriteRestaurantsChange, onBlacklistedRestaurantsChange, onShowFavouritesChange, onShowBlacklistChange, cacheData, onClaimModeChange, onRestaurantRefresh }) => {
-  const [activeTab, setActiveTab] = useState<'explore' | 'comments' | 'contributions' | 'user'>('explore');
+  const [activeTab, setActiveTab] = useState<'explore' | 'comments' | 'contributions' | 'user'>('user');
 
   const handleFilterChange = (filter: RestaurantFilter) => {
     if (onFilterChange) onFilterChange(filter);
@@ -110,11 +110,11 @@ const Sidebar: React.FC<SidebarProps> = ({ user, isOpen, onToggle, onFilterChang
 
       {/* Nội dung */}
       <div
-        className={`flex-1 overflow-y-auto p-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent 
+        className={`flex-1 overflow-y-auto p-4 scrollbar-hide
         ${isOpen ? 'opacity-100 visible' : 'opacity-0 invisible'} transition-opacity duration-300`}
       >
         {activeTab === 'explore' && <ExploreTab onFilterChange={handleFilterChange} mapCenter={mapCenter} cacheData={cacheData} />}
-        {activeTab === 'comments' && <CommentsTab restaurant={selectedRestaurant} lastFilterKeywords={lastFilterKeywords} onRestaurantRefresh={onRestaurantRefresh} user={user} />}
+        {activeTab === 'comments' && <RestaurantTab restaurant={selectedRestaurant} lastFilterKeywords={lastFilterKeywords} onRestaurantRefresh={onRestaurantRefresh} user={user} />}
         {activeTab === 'contributions' && <ContributionsTab mapCenter={mapCenter} onShowCenterMarkerChange={onShowCenterMarkerChange} selectedRestaurantForClaim={selectedRestaurantForClaim} onRestaurantSelectedForClaim={onRestaurantSelectedForClaim} onClaimModeChange={handleClaimModeChange} user={user} />}
         {activeTab === 'user' && <UserTab user={user} onUserChange={onUserChange} onNavigateToRestaurant={onNavigateToRestaurant} onFavouriteRestaurantsChange={onFavouriteRestaurantsChange} onBlacklistedRestaurantsChange={onBlacklistedRestaurantsChange} onShowFavouritesChange={onShowFavouritesChange} onShowBlacklistChange={onShowBlacklistChange} />}
       </div>

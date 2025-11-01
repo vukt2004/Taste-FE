@@ -3,10 +3,10 @@ import OpenStreetMap from '../components/OpenStreetMap';
 import L from 'leaflet';
 
 interface MapPageProps {
-  onMapLoad?: (map: L.Map) => void;
+  onMapLoad?: (map: L.Map | undefined) => void;
   showCenterMarker?: boolean;
-  markers?: { lat: number; lng: number; title?: string; description?: string }[];
-  onMarkerClick?: (lat: number, lng: number, title?: string) => void;
+  markers?: { lat: number; lng: number; title?: string; description?: string; type?: 'normal' | 'favourite' | 'blacklist'; restaurantId?: string }[];
+  onMarkerClick?: (lat: number, lng: number, title?: string, restaurantId?: string) => void;
 }
 
 const MapPage: React.FC<MapPageProps> = ({ onMapLoad, showCenterMarker, markers = [], onMarkerClick }) => {

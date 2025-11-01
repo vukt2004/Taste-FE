@@ -42,6 +42,8 @@ export interface Restaurant {
 }
 
 export class UserService {
+  private static refreshTokenPromise: Promise<boolean> | null = null;
+
   static isTokenExpired(): boolean {
     const expiresAt = localStorage.getItem('token_expires_at');
     if (!expiresAt) return true;
@@ -54,53 +56,63 @@ export class UserService {
   }
 
   static async refreshToken(): Promise<boolean> {
-    try {
-      const refreshToken = localStorage.getItem('refresh_token');
-      if (!refreshToken) {
-        console.log('Không có refresh token trong localStorage');
+    // Nếu đang refresh, trả về promise hiện tại thay vì refresh lại
+    if (this.refreshTokenPromise) {
+      return this.refreshTokenPromise;
+    }
+
+    // Tạo promise mới cho refresh token
+    this.refreshTokenPromise = (async () => {
+      try {
+        const refreshToken = localStorage.getItem('refresh_token');
+        if (!refreshToken) {
+          this.refreshTokenPromise = null;
+          return false;
+        }
+
+        const response = await fetch(`${BACKEND_URL}/api/auth/refresh`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ RefreshToken: refreshToken }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          if (data.success && data.data) {
+            localStorage.setItem('auth_token', data.data.accessToken);
+            if (data.data.refreshToken) {
+              localStorage.setItem('refresh_token', data.data.refreshToken);
+            }
+            if (data.data.expiresAt) {
+              localStorage.setItem('token_expires_at', data.data.expiresAt);
+            }
+            this.refreshTokenPromise = null;
+            return true;
+          }
+        } else {
+          console.error('Refresh token thất bại:', data.message);
+          // Nếu refresh token không hợp lệ, xóa tokens và logout
+          if (data.message?.includes('không hợp lệ') || data.message?.includes('hết hạn')) {
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('refresh_token');
+            localStorage.removeItem('user_id');
+            localStorage.removeItem('user_data');
+            localStorage.removeItem('token_expires_at');
+          }
+        }
+        this.refreshTokenPromise = null;
+        return false;
+      } catch (error) {
+        console.error('Lỗi refresh token:', error);
+        this.refreshTokenPromise = null;
         return false;
       }
+    })();
 
-      console.log('Đang refresh token...');
-      const response = await fetch(`${BACKEND_URL}/api/auth/refresh`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ RefreshToken: refreshToken }),
-      });
-
-      const data = await response.json();
-      console.log('Refresh token response:', data);
-
-      if (response.ok) {
-        if (data.success && data.data) {
-          localStorage.setItem('auth_token', data.data.accessToken);
-          if (data.data.refreshToken) {
-            localStorage.setItem('refresh_token', data.data.refreshToken);
-          }
-          if (data.data.expiresAt) {
-            localStorage.setItem('token_expires_at', data.data.expiresAt);
-          }
-          console.log('Refresh token thành công');
-          return true;
-        }
-      } else {
-        console.error('Refresh token thất bại:', data.message);
-        // Nếu refresh token không hợp lệ, xóa tokens và logout
-        if (data.message?.includes('không hợp lệ') || data.message?.includes('hết hạn')) {
-          localStorage.removeItem('auth_token');
-          localStorage.removeItem('refresh_token');
-          localStorage.removeItem('user_id');
-          localStorage.removeItem('user_data');
-          localStorage.removeItem('token_expires_at');
-        }
-      }
-      return false;
-    } catch (error) {
-      console.error('Lỗi refresh token:', error);
-      return false;
-    }
+    return this.refreshTokenPromise;
   }
 
   static getAuthHeaders(includeJson: boolean = true): HeadersInit {
@@ -112,25 +124,85 @@ export class UserService {
   }
 
   static async fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
-    const response = await fetch(url, options);
+    // Đảm bảo luôn có headers object
+    let headers: Headers;
+    if (options.headers instanceof Headers) {
+      headers = options.headers;
+    } else {
+      headers = new Headers(options.headers as HeadersInit | undefined);
+    }
+
+    // Kiểm tra và refresh token TRƯỚC KHI gửi request nếu token đã/sắp hết hạn
+    if (this.isTokenExpired()) {
+      const refreshSuccess = await this.refreshToken();
+      if (!refreshSuccess) {
+        // Vẫn tiếp tục gửi request để backend có thể trả về 401 và xử lý
+      }
+      // Luôn cập nhật Authorization header với token mới nhất sau khi refresh
+      const newToken = localStorage.getItem('auth_token');
+      if (newToken) {
+        headers.set('Authorization', `Bearer ${newToken}`);
+      }
+    } else {
+      // Nếu token chưa hết hạn, vẫn đảm bảo có Authorization header
+      const token = localStorage.getItem('auth_token');
+      if (token && !headers.has('Authorization')) {
+        headers.set('Authorization', `Bearer ${token}`);
+      }
+    }
     
-    // If unauthorized, try to refresh token
+    // Gửi request với headers đã được cập nhật
+    const response = await fetch(url, { ...options, headers });
+    
+    // Nếu vẫn bị 401 (có thể do token không hợp lệ hoặc refresh thất bại), thử refresh lại một lần nữa
     if (response.status === 401) {
-      console.log('Got 401, attempting to refresh token...');
+      console.log('Nhận được 401, đang thử refresh token lần nữa...');
       const refreshSuccess = await this.refreshToken();
       if (refreshSuccess) {
-        console.log('Token refreshed successfully, retrying request...');
-        // Retry request with new token
-        const newHeaders = new Headers(options.headers);
+        console.log('Token đã được refresh, đang thử lại request...');
+        // Retry request with new token - rebuild headers hoàn toàn
         const newToken = localStorage.getItem('auth_token');
-        if (newToken) {
-          newHeaders.set('Authorization', `Bearer ${newToken}`);
+        const retryHeaders = new Headers();
+        
+        // Copy các headers cũ (trừ Authorization)
+        if (options.headers) {
+          if (options.headers instanceof Headers) {
+            options.headers.forEach((value, key) => {
+              if (key.toLowerCase() !== 'authorization') {
+                retryHeaders.set(key, value);
+              }
+            });
+          } else if (Array.isArray(options.headers)) {
+            options.headers.forEach(([key, value]) => {
+              if (key.toLowerCase() !== 'authorization') {
+                retryHeaders.set(key, value);
+              }
+            });
+          } else {
+            Object.entries(options.headers).forEach(([key, value]) => {
+              if (key.toLowerCase() !== 'authorization' && value) {
+                retryHeaders.set(key, String(value));
+              }
+            });
+          }
         }
-        const retryResponse = await fetch(url, { ...options, headers: newHeaders });
-        console.log('Retry response status:', retryResponse.status);
+        
+        // Thêm Authorization header mới
+        if (newToken) {
+          retryHeaders.set('Authorization', `Bearer ${newToken}`);
+        }
+        
+        // Đảm bảo có Content-Type nếu cần
+        if (!retryHeaders.has('Content-Type') && options.body) {
+          if (options.body instanceof FormData) {
+            // FormData tự động set Content-Type với boundary
+          } else {
+            retryHeaders.set('Content-Type', 'application/json');
+          }
+        }
+        
+        const retryResponse = await fetch(url, { ...options, headers: retryHeaders });
         return retryResponse;
-      } else {
-        console.log('Token refresh failed');
       }
     }
     
@@ -245,7 +317,7 @@ export class ReviewService {
   static async uploadImages(files: File[]): Promise<string[]> {
     const form = new FormData();
     files.forEach(f => form.append('images', f));
-    const res = await fetch(`${BACKEND_URL}${API_ENDPOINTS.REVIEWS.UPLOAD_IMAGES}`, {
+    const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.REVIEWS.UPLOAD_IMAGES}`, {
       method: 'POST',
       headers: UserService.getAuthHeaders(false),
       body: form,
@@ -255,7 +327,7 @@ export class ReviewService {
   }
 
   static async createReview(payload: CreateReviewPayload): Promise<ApiResponse<unknown>> {
-    const res = await fetch(`${BACKEND_URL}${API_ENDPOINTS.REVIEWS.CREATE}`, {
+    const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.REVIEWS.CREATE}`, {
       method: 'POST',
       headers: {
         ...UserService.getAuthHeaders(),
@@ -267,7 +339,7 @@ export class ReviewService {
   }
 
   static async toggleLike(reviewId: string): Promise<ApiResponse<unknown>> {
-    const res = await fetch(`${BACKEND_URL}${API_ENDPOINTS.REVIEWS.LIKE(reviewId)}`, {
+    const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.REVIEWS.LIKE(reviewId)}`, {
       method: 'POST',
       headers: UserService.getAuthHeaders(),
     });
@@ -275,7 +347,7 @@ export class ReviewService {
   }
 
   static async toggleDislike(reviewId: string): Promise<ApiResponse<unknown>> {
-    const res = await fetch(`${BACKEND_URL}${API_ENDPOINTS.REVIEWS.TOGGLE_DISLIKE(reviewId)}`, {
+    const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.REVIEWS.TOGGLE_DISLIKE(reviewId)}`, {
       method: 'POST',
       headers: UserService.getAuthHeaders(),
     });
@@ -286,7 +358,7 @@ export class ReviewService {
 // Restaurant service
 export class RestaurantService {
   static async create(formData: FormData): Promise<ApiResponse<unknown>> {
-    const res = await fetch(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANTS.CREATE}`, {
+    const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANTS.CREATE}`, {
       method: 'POST',
       headers: UserService.getAuthHeaders(false),
       body: formData,
@@ -295,7 +367,7 @@ export class RestaurantService {
   }
 
   static async update(id: string, formData: FormData): Promise<ApiResponse<unknown>> {
-    const res = await fetch(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANTS.UPDATE(id)}`, {
+    const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANTS.UPDATE(id)}`, {
       method: 'PUT',
       headers: UserService.getAuthHeaders(false),
       body: formData,
@@ -304,7 +376,7 @@ export class RestaurantService {
   }
 
   static async toggleEdit(restaurantId: string, canEdit: boolean, reason?: string): Promise<ApiResponse<unknown>> {
-    const res = await fetch(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANTS.TOGGLE_EDIT}`, {
+    const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.RESTAURANTS.TOGGLE_EDIT}`, {
       method: 'POST',
       headers: {
         ...UserService.getAuthHeaders(),
@@ -327,7 +399,7 @@ export class AmenityService {
   }
 
   static async addToRestaurant(payload: { restaurantId: string; amenityName: string; description?: string; category?: string; icon?: string; reason?: string; }) {
-    const res = await fetch(`${BACKEND_URL}${API_ENDPOINTS.AMENITIES.ADD_TO_RESTAURANT}`, {
+    const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.AMENITIES.ADD_TO_RESTAURANT}`, {
       method: 'POST',
       headers: {
         ...UserService.getAuthHeaders(),
@@ -356,7 +428,7 @@ export class DishService {
   }
 
   static async create(payload: { name: string; description?: string; tags?: string; typeIds?: string[] }) {
-    const res = await fetch(`${BACKEND_URL}${API_ENDPOINTS.DISHES.LIST}`, {
+    const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.DISHES.LIST}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -368,7 +440,7 @@ export class DishService {
   }
 
   static async addCategories(dishId: string, typeIds: string[]) {
-    const res = await fetch(`${BACKEND_URL}/api/dish/${dishId}/categories/add`, {
+    const res = await UserService.fetchWithAuth(`${BACKEND_URL}/api/dish/${dishId}/categories/add`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -380,7 +452,7 @@ export class DishService {
   }
 
   static async removeCategories(dishId: string, typeIds: string[]) {
-    const res = await fetch(`${BACKEND_URL}/api/dish/${dishId}/categories/remove`, {
+    const res = await UserService.fetchWithAuth(`${BACKEND_URL}/api/dish/${dishId}/categories/remove`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
@@ -407,7 +479,7 @@ export class RestaurantSearchService {
 
 export class DishContributionService {
   static async create(payload: { name: string; description?: string; tags?: string; category?: string; icon?: string; }) {
-    const res = await fetch(`${BACKEND_URL}${API_ENDPOINTS.DISH_CONTRIBUTION.CREATE}`, {
+    const res = await UserService.fetchWithAuth(`${BACKEND_URL}${API_ENDPOINTS.DISH_CONTRIBUTION.CREATE}`, {
       method: 'POST',
       headers: {
         ...UserService.getAuthHeaders(),

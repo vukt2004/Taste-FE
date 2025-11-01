@@ -1,4 +1,4 @@
-export const BACKEND_URL = 'https://tastemapbe.onrender.com';
+export const BACKEND_URL = 'https://localhost:7268';
 
 export const API_ENDPOINTS = {
   AUTH: {
@@ -37,10 +37,15 @@ export const API_ENDPOINTS = {
     CREATE: '/api/restaurant',
     UPDATE: (id: string) => `/api/restaurant/${id}`,
     GET: (id: string) => `/api/restaurant/${id}`,
+    GET_ALL: '/api/restaurant/all',
     TOGGLE_EDIT: '/api/restaurant/toggle-edit',
     FILTER: '/api/restaurant/filter',
     SEARCH_BY_DISH_IN_BOUNDS: (dishId: string, n: number, s: number, e: number, w: number) =>
       `/api/restaurant/search-by-dish?dishId=${dishId}&north=${n}&south=${s}&east=${e}&west=${w}`,
+  },
+  ADMIN: {
+    RESTAURANTS: '/api/admin/restaurants',
+    USERS: '/api/admin/users',
   },
   AMENITIES: {
     LIST: '/api/amenity',
