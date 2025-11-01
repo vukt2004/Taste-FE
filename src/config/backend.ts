@@ -1,4 +1,4 @@
-export const BACKEND_URL = 'https://localhost:7268';
+export const BACKEND_URL = 'https://tastemapbe.onrender.com';
 
 export const API_ENDPOINTS = {
   AUTH: {
