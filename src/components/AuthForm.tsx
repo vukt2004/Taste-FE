@@ -106,7 +106,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ onLoginSuccess, onLogout }) => {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        setSuccessMessage('Đăng ký thành công! Vui lòng kiểm tra email để xác thực tài khoản.');
+        setSuccessMessage('Đăng ký thành công! Vui lòng kiểm tra email để xác thực tài khoản. Nếu không thấy email, vui lòng kiểm tra thư mục spam/quảng cáo.');
         setRegisterEmail(email);
         setAuthMode('verify');
         // Clear form
@@ -227,7 +227,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ onLoginSuccess, onLogout }) => {
       const data = await response.json();
 
       if (response.ok) {
-        setSuccessMessage('Đã gửi lại mã OTP. Vui lòng kiểm tra email.');
+        setSuccessMessage('Đã gửi lại mã OTP. Vui lòng kiểm tra email (bao gồm cả thư mục spam/quảng cáo).');
       } else {
         setError(data.message || 'Không thể gửi lại mã OTP');
       }
@@ -416,6 +416,9 @@ const AuthForm: React.FC<AuthFormProps> = ({ onLoginSuccess, onLogout }) => {
           <div className="space-y-4">
             <div className="text-sm text-gray-600 mb-4">
               Nhập mã OTP đã được gửi đến email <strong>{registerEmail}</strong>
+              <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                💡 Nếu không thấy email, vui lòng kiểm tra thư mục <strong>Spam</strong> hoặc <strong>Quảng cáo</strong>
+              </div>
             </div>
             <form onSubmit={handleVerifyEmail} className="space-y-4">
               <div>
