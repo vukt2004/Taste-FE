@@ -37,9 +37,10 @@ interface ContributionsTabProps {
   onRestaurantSelectedForClaim?: (restaurant: { id: string; name: string } | null) => void;
   onClaimModeChange?: (isClaimMode: boolean) => void;
   user?: { id: string; username: string } | null;
+  onTabChange?: (tab: 'explore' | 'comments' | 'contributions' | 'user') => void;
 }
 
-const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCenterMarkerChange, selectedRestaurantForClaim: propSelectedRestaurant, onRestaurantSelectedForClaim, onClaimModeChange, user }) => {
+const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCenterMarkerChange, selectedRestaurantForClaim: propSelectedRestaurant, onRestaurantSelectedForClaim, onClaimModeChange, user, onTabChange }) => {
   const [showModal, setShowModal] = useState(false);
   const [contributionType, setContributionType] = useState<ContributionType | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -398,7 +399,7 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
           <p className="text-sm text-yellow-800 mb-2">Vui lòng đăng nhập để đóng góp</p>
           <button
-            onClick={() => window.location.href = '/login'}
+            onClick={() => onTabChange?.('user')}
             className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors text-sm"
           >
             Đăng nhập

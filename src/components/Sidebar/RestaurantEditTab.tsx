@@ -138,7 +138,7 @@ const RestaurantEditTab: React.FC<RestaurantEditTabProps> = ({ restaurant, onUpd
     };
     
     loadData();
-  }, [restaurant?.id]);
+  }, [restaurant]);
 
   // Close selectors when clicking outside
   useEffect(() => {
