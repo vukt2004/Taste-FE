@@ -211,7 +211,7 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
       });
 
       const data = await response.json();
-          results.push({ name: dishName, success: response.ok && data.success, message: data.message });
+          results.push({ name: dishName, success: response.ok && data.isSuccess, message: data.message });
         } catch {
           results.push({ name: dishName, success: false, message: 'Lỗi kết nối' });
         }
@@ -223,7 +223,7 @@ const ContributionsTab: React.FC<ContributionsTabProps> = ({ mapCenter, onShowCe
 
       if (failedCount === 0) {
         setSubmitSuccess(`Đã gửi thành công ${successCount} món ăn!`);
-        setDishNames([]); // Xóa danh sách sau khi gửi thành công
+        setDishNames([]);
       } else if (successCount > 0) {
         setSubmitError(`Gửi thành công ${successCount}/${results.length} món ăn. Có ${failedCount} món thất bại.`);
       } else {
