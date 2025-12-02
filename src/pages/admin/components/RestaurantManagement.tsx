@@ -266,9 +266,6 @@ const RestaurantManagement: React.FC = () => {
                   Tên quán ăn
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Chủ quán
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Trạng thái
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -293,12 +290,6 @@ const RestaurantManagement: React.FC = () => {
                       <div className="text-sm font-medium text-gray-900">{restaurant.restaurantName}</div>
                       {restaurant.description && (
                         <div className="text-xs text-gray-500 line-clamp-1">{restaurant.description}</div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{restaurant.ownerName || 'N/A'}</div>
-                      {restaurant.ownerId && (
-                        <div className="text-xs text-gray-500">{restaurant.ownerId.slice(0, 8)}...</div>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
